@@ -14,7 +14,7 @@ Manifest.toml          # optional: include if you want reproducibility
 .julia/
 deps/
 logs/
-
+data/
 # VSCode
 
 .vscode/

@@ -17,7 +17,7 @@ global:
 #          typically either 20000 or 40000 is used
     maxlmax: 1000
 
-    modelFolder: ../data/model/
+    modelFolder: ../dataInput/model/
 # 6. interpolation method fo 1D model
     傾き許容度: 0.01
     eps: 1.5e-3

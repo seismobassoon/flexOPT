@@ -28,12 +28,12 @@ metaInfo=MetaInfo()
 dsm1Dconfig=planet1Dconfig()
 
 try 
-    data = YAML.load_file(dirname(@__FILE__) *"/../../data/config.yaml"; dicttype=Dict{Symbol, Any})
+    data = YAML.load_file(dirname(@__FILE__) *"/../../dataInput/config.yaml"; dicttype=Dict{Symbol, Any})
     test_dict = data[:classicDSM][1]
     StructTypes.StructType(::Type{MetaInfo}) = StructTypes.Mutable()
     global metaInfo = StructTypes.constructfrom(MetaInfo, test_dict)
 catch
-    @error("planet1D configuration file not found or not readable", dirname(@__FILE__) *"/../../data/config.yaml")
+    @error("planet1D configuration file not found or not readable", dirname(@__FILE__) *"/../../dataInput/config.yaml")
 end
 
 try 
@@ -51,7 +51,7 @@ catch
     dsm1Dconfig.maxlmax = 80000
     dsm1Dconfig.傾き許容度 = 2.0
     dsm1Dconfig.eps = 1.5e-3
-    global dsm1Dconfig.modelFolder = "../../data/models"
+    global dsm1Dconfig.modelFolder = "../../dataInput/models"
 end
 
 

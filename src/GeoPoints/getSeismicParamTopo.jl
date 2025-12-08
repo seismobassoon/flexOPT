@@ -1,6 +1,6 @@
 
 
-function getParamsAndTopo(allGridsInGeoPoints,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
+function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
 
     
     #@enum Couche Graine Noyau Manteau Océane Atmosphère Ionosphère Dehors
