@@ -1,0 +1,23 @@
+
+global:
+# DSM configuration file
+# please contact NF seismobassoon@gmail.com for further information
+#
+# 1. (re) relative error (see GT95 eq. 6.2: you can control the quality of synthetics)
+  - re: 1.e-2 
+#
+# 2. (ratc) ampratio using in grid cut-off (1.d-10 is recommended)
+    ratc: 1.e-10
+# 3. (ratl) ampratio using in l-cutoff  
+    ratl: 1.e-5
+# 4. wrap-around attenuation for omegaiTlen (usually 1.d-2 is used)
+    omegaiTlen: 1.e-2
+# 5. (maxlmax) (subroutine calamp will calculate lmax for each frequency regarding ratl,
+#          but here you can decide the maximum value of lmax in case of explosion)
+#          typically either 20000 or 40000 is used
+    maxlmax: 1000
+
+    modelFolder: ../data/model/
+# 6. interpolation method fo 1D model
+    傾き許容度: 0.01
+    eps: 1.5e-3

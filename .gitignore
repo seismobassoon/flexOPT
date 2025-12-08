@@ -7,7 +7,7 @@
 # Local files 
 *_local.jl
 *_local.ipynb
-
+*_local
 # Julia artifacts
 
 Manifest.toml          # optional: include if you want reproducibility

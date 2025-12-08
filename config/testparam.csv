@@ -1,0 +1,39 @@
+# modelFile should be placed in DSM1D/data/model/
+#modelFile, mars/model_0000.nd
+#modelFile, earth/FujiQ1.sh.model
+#modelFile, earth/ak135.psv.model
+#modelFile, earth/ak135AtmosphereQcomplete.model
+#modelFile, mars/ModelDW-AKGeoth.tvel.txt
+modelFile, earth/PREM.psv.model
+
+
+
+# maxFrequencyMin [Hz] is the desired maximal frequency that DSM will compute 
+# (it could compute even higher)
+maxFrequencyMin, 2.0
+
+
+
+
+
+
+# Optional parameters
+
+# averagedPlanetRadius [km] is an optional parameter
+# (in case you want to put atmosphere, it is recommended to precise here)
+#averagedPlanetRadius, 6371.e0
+
+# minFrequencyMax [Hz] is an optional parameter that DSM will compute
+# (it could start even lower)
+# if not declared, DSM will compute from "zero" frequency
+# minFrequencyMax, 0.e0
+
+
+# timeWindowMinimum/timeWindow is an optional parameter that decides the width of the time Window in second
+# The real width timeWindow will be the smallest 2^Integer*0.1 [s] bigger than or equal to timeWindowMinimum
+# but we take 3276.8 [s] if not declared.
+# If the user precises timeWindow, we do not modify it 
+# (we ignore timeWindowMinimum in case of declarations of two variables)
+
+#timeWindowMinimum, 4000.e0
+#timeWindow, 3276.8e0
