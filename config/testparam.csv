@@ -1,4 +1,4 @@
-# modelFile should be placed in DSM1D/data/model/
+# modelFile should be placed in planet1D/data/model/
 #modelFile, mars/model_0000.nd
 #modelFile, earth/FujiQ1.sh.model
 #modelFile, earth/ak135.psv.model

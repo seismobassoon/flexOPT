@@ -1,5 +1,5 @@
 @doc raw"""
-     DSM1Dmotor.jl prepares the vertical grids, construt T and H (and gravity+wind in the near future) 
+     planet1Dmotor.jl prepares the vertical grids, construt T and H (and gravity+wind in the near future) 
      and preforms LU factorisation of (ω² T - H) for the DSM computation.
   
     This should deal with GPU/MPI optimisation and parallelisation, 
@@ -10,5 +10,5 @@
 
 
 
-myVerticalGrid = DSM1D.VerticalGridStructure(DSM1D.my1DDSMmodel,DSM1D.dsm1Dconfig.re,maximum(DSM1D.input.ωᵣ))
+myVerticalGrid = planet1D.VerticalGridStructure(planet1D.my1DDSMmodel,planet1D.dsm1Dconfig.re,maximum(planet1D.input.ωᵣ))
 

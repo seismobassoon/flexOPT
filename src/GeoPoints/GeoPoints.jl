@@ -1,5 +1,22 @@
 DEFAULT_PLANET = Ref(:Earth) #set_default_planet! can change this
 
+
+function getTopoViaGMT(params::Dict)
+    @unpack precision, region = params
+    resolution=String(chopprefix(precision, "@earth_relief_"))
+    if DEFAULT_PLANET[] === :Mars
+        G = gmtread(remotegrid("mars", res = resolution))
+    elseif DEFAULT_PLANET[] === :Earth
+        # do nothing
+    else
+        @show "not yet coded for your planet"
+    end
+
+    topo = GMT.grdcut(precision, region=region)
+    return @strdict(topo)
+end
+
+
 # Planetary parameters (semi-major axis `a` in meters, flattening `f`)
 
 function planet_ellipsoid(name::Symbol)
@@ -297,7 +314,7 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         allGridsInGeoPoints[iXYZ]=tmpGeoPoint
         allGridsInCartesian[iXYZ] = tmpLocalPoint
 
-        effectiveRadii[iXYZ]=effectiveRadius(tmpGeoPoint,DSM1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 )
+        effectiveRadii[iXYZ]=effectiveRadius(tmpGeoPoint,planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 )
     end
 
     return allGridsInGeoPoints, allGridsInCartesian, effectiveRadii

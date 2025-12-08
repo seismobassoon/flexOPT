@@ -1,4 +1,4 @@
 classicDSM:
   - name: 1D DSM
     info: classical DSM with linear spline and spherical harmonics
-    DSM1DconfigFile: ../data/DSMconfig.yaml
+    planet1DconfigFile: ../data/DSMconfig.yaml

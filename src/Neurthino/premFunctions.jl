@@ -2,9 +2,9 @@
 #PREM version of everything
 
 function extendWithρ!(ρfield, Xnode, Ynode, dR;rcmb=6.371e6, dθ=2*π/360.0, iCheckCoreModel=true)
-    # local function here: this requires DSM1D.jl, testparam.csv
+    # local function here: this requires planet1D.jl, testparam.csv
 
-    premCMB = DSM1D.my1DDSMmodel.averagedPlanetCMBInKilometer * 1.e3
+    premCMB = planet1D.my1DDSMmodel.averagedPlanetCMBInKilometer * 1.e3
 
     arrayRadius = collect(0:dR:rcmb)
     if arrayRadius[end] != rcmb
@@ -12,8 +12,8 @@ function extendWithρ!(ρfield, Xnode, Ynode, dR;rcmb=6.371e6, dθ=2*π/360.0, i
     end
 
 
-    _, arrayParams  = DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel, arrayRadius.*1e-3, "below")
-    #DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel, arrayRadius.*1.e-3, "above")
+    _, arrayParams  = planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel, arrayRadius.*1e-3, "below")
+    #planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel, arrayRadius.*1.e-3, "above")
     tmpDensity=arrayParams.ρ
 
 

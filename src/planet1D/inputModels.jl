@@ -3,7 +3,7 @@ using CSV, DataFrames,BenchmarkTools
 
     test1DModelType: test the model type and return the model type
 
-    readConvertedModel: cll DSM1DPSVmodel constructor to convert the model to DSM1D format
+    readConvertedModel: cll planet1DPSVmodel constructor to convert the model to planet1D format
     Note that the max radius of the solid model should be treated as the planetary radius for DSM/MINEOS while the max depth of the TauP model should be treated as the planetary radius
 
     read1DModel(modelFile::String):This function will read the input model from a file in DSM native format or MINEOS format 
@@ -17,21 +17,21 @@ function readConvertedModel(rawArray::Vector{Any})
     # first we need to know the model type
     modelType=test1DModelType(rawArray)
 
-    if DSM1D.input.averagedPlanetRadius === nothing
-        DSM1D.input.averagedPlanetRadius=0.e0
+    if planet1D.input.averagedPlanetRadius === nothing
+        planet1D.input.averagedPlanetRadius=0.e0
     end
     if modelType=="DSM"|| modelType == "DSM-SH" || modelType == "DSM-Q-Complete"
         array=convert(Array{Float64,1}, rawArray[2:end])
-        tmpDSM1Dmodel= DSM1DPSVmodel(Int64(rawArray[1]),modelType,DSM1D.input.averagedPlanetRadius,array)
-        #println(tmpDSM1Dmodel)
+        tmpplanet1Dmodel= planet1DPSVmodel(Int64(rawArray[1]),modelType,planet1D.input.averagedPlanetRadius,array)
+        #println(tmpplanet1Dmodel)
     elseif modelType=="MINEOS" || modelType=="TauP"
         array=convert(Array{Float64,1}, rawArray[1:end])
-        tmpDSM1Dmodel=DSM1DPSVmodel(modelType,array,DSM1D.dsm1Dconfig.傾き許容度,DSM1D.dsm1Dconfig.eps)
+        tmpplanet1Dmodel=planet1DPSVmodel(modelType,array,planet1D.dsm1Dconfig.傾き許容度,planet1D.dsm1Dconfig.eps)
     else
         @error("Model type $modelType not recognized")
-        # construct first DSM1D PSV modelthen we find the way to convert it to DSM1D format 
+        # construct first planet1D PSV modelthen we find the way to convert it to planet1D format 
     end
-    return tmpDSM1Dmodel
+    return tmpplanet1Dmodel
 end 
 
 function test1DModelType(array::Vector{Any})

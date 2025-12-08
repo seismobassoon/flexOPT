@@ -496,7 +496,7 @@ end
 
 
 function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iCheckCoreModel=true)
-    # local function here: this requires DSM1D.jl, testparam.csv
+    # local function here: this requires planet1D.jl, testparam.csv
     #
     # This function will add the ρ field computed only for the core 
 
@@ -505,7 +505,7 @@ function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iC
     # the 1D core model will be given by specifying the file to use in testparam.csv 
 
 
-    premCMB = DSM1D.my1DDSMmodel.averagedPlanetCMBInKilometer * 1.e3
+    premCMB = planet1D.my1DDSMmodel.averagedPlanetCMBInKilometer * 1.e3
 
     arrayRadius = collect(0:dR:rcmb)
     if arrayRadius[end] != rcmb
@@ -515,8 +515,8 @@ function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iC
 
 
 
-    _, arrayParams  = DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel, arrayRadiusFaked, "below")
-    #DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel, arrayRadius.*1.e-3, "above")
+    _, arrayParams  = planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel, arrayRadiusFaked, "below")
+    #planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel, arrayRadius.*1.e-3, "above")
     tmpDensity=arrayParams.ρ
 
     tmpXnode = [(tmpRadius*cos(tmpθ)) for tmpRadius in arrayRadius for tmpθ in collect(0:dθ:2π)]

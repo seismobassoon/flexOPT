@@ -2,10 +2,10 @@
 
 
 function myDensityFrom1DModel(arrayRadius) 
-    #dependencies : DSM1D
+    #dependencies : planet1D
 
     radiusInKilometer = arrayRadius*1.e-3
-    density  = DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel, radiusInKilometer)
+    density  = planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel, radiusInKilometer)
 
     return density
 end

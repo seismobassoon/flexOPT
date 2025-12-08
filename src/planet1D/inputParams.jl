@@ -1,18 +1,18 @@
 using YAML,StructTypes,CSV,DataFrames,Unitful
 
 @doc raw"""
-    DSM1Dconfig
+    planet1Dconfig
 
-    This structure contains the parameters used in the DSM1D code. 
-    The parameters are read from a file called DSM1Dconfig.txt. 
+    This structure contains the parameters used in the planet1D code. 
+    The parameters are read from a file called planet1Dconfig.txt. 
     If the file is not found, the default values are used. 
-    The file must be in the same directory as the DSM1D executable.
+    The file must be in the same directory as the planet1D executable.
 
-    DSM1Dconfig.re: relative error (see GT95 eq. 6.2: you can control the quality of synthetics)
-    DSM1Dconfig.ratc: ampratio using in grid cut-off (1.d-10 is recommended)
-    DSM1Dconfig.ratl: ampratio using in l-cutoff
-    DSM1Dconfig.omegaiTlen: wrap-around attenuation for omegaiTlen (usually 1.d-2 is used)
-    DSM1Dconfig.maxlmax: maximum lmax
+    planet1Dconfig.re: relative error (see GT95 eq. 6.2: you can control the quality of synthetics)
+    planet1Dconfig.ratc: ampratio using in grid cut-off (1.d-10 is recommended)
+    planet1Dconfig.ratl: ampratio using in l-cutoff
+    planet1Dconfig.omegaiTlen: wrap-around attenuation for omegaiTlen (usually 1.d-2 is used)
+    planet1Dconfig.maxlmax: maximum lmax
 
     Example of file:
     re = 1.e-2
@@ -25,24 +25,24 @@ using YAML,StructTypes,CSV,DataFrames,Unitful
 """
 input=Input()
 metaInfo=MetaInfo()
-dsm1Dconfig=DSM1Dconfig()
+dsm1Dconfig=planet1Dconfig()
 
 try 
-    data = YAML.load_file(dirname(@__FILE__) *"/../data/config.yaml"; dicttype=Dict{Symbol, Any})
+    data = YAML.load_file(dirname(@__FILE__) *"/../../data/config.yaml"; dicttype=Dict{Symbol, Any})
     test_dict = data[:classicDSM][1]
     StructTypes.StructType(::Type{MetaInfo}) = StructTypes.Mutable()
     global metaInfo = StructTypes.constructfrom(MetaInfo, test_dict)
 catch
-    @error("DSM1D configuration file not found or not readable", dirname(@__FILE__) *"/../data/config.yaml")
+    @error("planet1D configuration file not found or not readable", dirname(@__FILE__) *"/../../data/config.yaml")
 end
 
 try 
-    data = YAML.load_file(dirname(@__FILE__) *"/"* metaInfo.DSM1DconfigFile; dicttype=Dict{Symbol, Any})
+    data = YAML.load_file(dirname(@__FILE__) *"/../"* metaInfo.planet1DconfigFile; dicttype=Dict{Symbol, Any})
     test_dict = data[:global][1]
-    StructTypes.StructType(::Type{DSM1Dconfig}) = StructTypes.Mutable()
-    global dsm1Dconfig = StructTypes.constructfrom(DSM1Dconfig, test_dict)
+    StructTypes.StructType(::Type{planet1Dconfig}) = StructTypes.Mutable()
+    global dsm1Dconfig = StructTypes.constructfrom(planet1Dconfig, test_dict)
 catch
-    @warn("DSM1D configuration file not found")
+    @warn("planet1D configuration file not found")
     # see mainStructures.jl for the default values
     dsm1Dconfig.re = 1.e-2
     dsm1Dconfig.ratc = 1.e-10
@@ -51,13 +51,13 @@ catch
     dsm1Dconfig.maxlmax = 80000
     dsm1Dconfig.傾き許容度 = 2.0
     dsm1Dconfig.eps = 1.5e-3
-    global dsm1Dconfig.modelFolder = "../data/models"
+    global dsm1Dconfig.modelFolder = "../../data/models"
 end
 
 
 
 try 
-    paramFile= dirname(@__FILE__) *"/"*Main.ParamFile
+    paramFile= dirname(@__FILE__) *"/../"*Main.ParamFile
     data = CSV.read(paramFile,DataFrame; header=false, comment="#")
     dic=Dict(Pair.(data.Column1, data.Column2))
     input.modelFile=strip(dic["modelFile"])
@@ -149,7 +149,7 @@ try
         input.GUIoption=false
     end
 catch
-    @error("ParamFile file not found or not readable", dirname(@__FILE__) *"/"*Main.ParamFile)
+    @error("ParamFile file not found or not readable", dirname(@__FILE__) *"/../"*Main.ParamFile)
 end
 
 

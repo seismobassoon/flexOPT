@@ -20,11 +20,11 @@ end
 mutable struct MetaInfo 
     name::String
     info::String
-    DSM1DconfigFile::String
+    planet1DconfigFile::String
     MetaInfo() = new()
 end
 
-mutable struct DSM1Dconfig 
+mutable struct planet1Dconfig 
     re::Float64 # (re) relative error (see GT95 eq. 6.2: you can control the quality of synthetics)
     ratc::Float64 # ampratio using in grid cut-off (1.d-10 is recommended)
     ratl::Float64 # ampratio using in l-cutoff
@@ -34,11 +34,11 @@ mutable struct DSM1Dconfig
     modelFolder::String
     傾き許容度::Float64 # tolerance for the slope change to be considered for a fusion
     eps::Float64 # tolerance for the error in interpolation
-    DSM1Dconfig() = new()
+    planet1Dconfig() = new()
 end
 
 
-mutable struct DSM1DPSVmodel 
+mutable struct planet1DPSVmodel 
     nzone::Int64
     averagedPlanetRadiusInKilometer::Float64
     averagedPlanetCMBInKilometer::Float64
@@ -59,7 +59,7 @@ mutable struct DSM1DPSVmodel
     C_QμPower    ::Array{Float64,2}
     C_η     ::Array{Float64,2}
     
-    function DSM1DPSVmodel()
+    function planet1DPSVmodel()
         # This constructs an empty struct with the right dimensions
         return new(1,0.e0,["U"],
         [0.e0],[0.e0], [0.e0],[0.e0],
@@ -68,7 +68,7 @@ mutable struct DSM1DPSVmodel
         zeros(1,4),zeros(1,4),zeros(1,4),
         zeros(1,4))
     end
-    function DSM1DPSVmodel(nzone::Int64,averagedPlanetRadius::Float64)
+    function planet1DPSVmodel(nzone::Int64,averagedPlanetRadius::Float64)
         # This constructs an empty struct with the right dimensions
         averagedPlanetCMBInKilometer::Float64 = 0.0
         normalisedCMB::Float64 = 0.0
@@ -85,8 +85,8 @@ mutable struct DSM1DPSVmodel
 
     
 
-    function DSM1DPSVmodel(modelType::String,rawArray::Array{Float64,1},傾き許容度::Float64,eps::Float64)
-        # This subroutine constructs a DSM1D model from a MINEOS model
+    function planet1DPSVmodel(modelType::String,rawArray::Array{Float64,1},傾き許容度::Float64,eps::Float64)
+        # This subroutine constructs a planet1D model from a MINEOS model
 
         if modelType == "MINEOS" || modelType== "TauP" # for MINEOS
             if modelType == "MINEOS"
@@ -173,7 +173,7 @@ mutable struct DSM1DPSVmodel
                 end
             end
  
-            Coefs=DSM1DPSVmodel(nLayers,tmpaveragedPlanetRadius)
+            Coefs=planet1DPSVmodel(nLayers,tmpaveragedPlanetRadius)
 
             Coefs.C_ρ =modifyLinearCoefs(nLayers, tmpCoefs.Density, normalisedtmpBottomRadius, normalisedtmpTopRadius, 傾き許容度,eps)
             Coefs.C_Vpv=modifyLinearCoefs(nLayers, tmpCoefs.Vpv, normalisedtmpBottomRadius, normalisedtmpTopRadius, 傾き許容度,eps)
@@ -208,7 +208,7 @@ mutable struct DSM1DPSVmodel
         return Coefs
     end
 
-    function DSM1DPSVmodel(nzone::Int64,modelType::String,averagedPlanetRadius::Float64,array::Array{Float64,1})
+    function planet1DPSVmodel(nzone::Int64,modelType::String,averagedPlanetRadius::Float64,array::Array{Float64,1})
         # This is for DSM classic / DSM-SH / DSM-Q-Complete 
         
         Csolid_or_fluid=Array{String,1}(undef,nzone)
@@ -302,7 +302,7 @@ mutable struct VerticalGridStructure
     solid_or_fluid::Array{String,1}
 
 
-    function VerticalGridStructure(Coefs::DSM1DPSVmodel,relativeError::Float64,localωMax::Float64,locallCritical::Int64=0)
+    function VerticalGridStructure(Coefs::planet1DPSVmodel,relativeError::Float64,localωMax::Float64,locallCritical::Int64=0)
         # We scan the model by using the equation 6.2 of Geller & Takeuchi 1995
         tmpRadius=Float64[]
         tmpNormalisedRadius=Float64[]
@@ -477,7 +477,7 @@ function modifyLinearCoefs(nLayers, tmpCoefs, normalisedtmpBottomRadius, normali
     return coefs
 end 
 
-function reduceLayersDSM(tmpCoefs::DSM1DPSVmodel)
+function reduceLayersDSM(tmpCoefs::planet1DPSVmodel)
     nLayers=tmpCoefs.nzone
     j_start=[]
     j_end=[]
@@ -491,7 +491,7 @@ function reduceLayersDSM(tmpCoefs::DSM1DPSVmodel)
         i+=1
     end
     nLayers=length(j_start)
-    Coefs=DSM1DPSVmodel(nLayers,tmpCoefs.averagedPlanetRadiusInKilometer)
+    Coefs=planet1DPSVmodel(nLayers,tmpCoefs.averagedPlanetRadiusInKilometer)
     for i in 1:nLayers
         Coefs.topRadius[i]=tmpCoefs.topRadius[j_end[i]]
         Coefs.bottomRadius[i]=tmpCoefs.bottomRadius[j_start[i]]
@@ -535,7 +535,7 @@ end
 
 
 
-function compute1DseismicParamtersFromPolynomialCoefficients(Coefs::DSM1DPSVmodel, numPointsPerLayer::Int64)
+function compute1DseismicParamtersFromPolynomialCoefficients(Coefs::planet1DPSVmodel, numPointsPerLayer::Int64)
     # this function will compute the seismic parameters from the polynomial coefficients and the normalised radii
     nLayers=Coefs.nzone
     normalisedtmpBottomRadius=Coefs.bottomRadius./Coefs.averagedPlanetRadiusInKilometer
@@ -569,7 +569,7 @@ function compute1DseismicParamtersFromPolynomialCoefficients(Coefs::DSM1DPSVmode
     return radius, parameter
 end
 
-function compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(Coefs::DSM1DPSVmodel, tmpRadius::Float64)
+function compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(Coefs::planet1DPSVmodel, tmpRadius::Float64)
     #this is the scalar version of the lengthy function below
 
     nLayers=Coefs.nzone
@@ -604,7 +604,7 @@ end
 
 
 
-function compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(Coefs::DSM1DPSVmodel, tmpRadiiInKilometer::Array{Float64,1}, belowOrAbove::String)
+function compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(Coefs::planet1DPSVmodel, tmpRadiiInKilometer::Array{Float64,1}, belowOrAbove::String)
 
 
     # this function gives back an array of parameters for an array of radii
@@ -723,7 +723,7 @@ end
 
 
 
-function writeClassicDSM1DPSVmodel(Coefs::DSM1DPSVmodel,filename::String)
+function writeClassicplanet1DPSVmodel(Coefs::planet1DPSVmodel,filename::String)
     # this needs 'using Printf'
     fmtDepth(x) = @sprintf("%.2f",x)
     fmtCoefs(x) = @sprintf("%.5f",x)
@@ -746,4 +746,4 @@ function writeClassicDSM1DPSVmodel(Coefs::DSM1DPSVmodel,filename::String)
 end
 
 
-#export writeClassicDSM1DPSVmodel
+#export writeClassicplanet1DPSVmodel

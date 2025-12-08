@@ -26,7 +26,7 @@ module planet1D
     include("planet1D/inputModels.jl")
 
     # if geodynamic model -> use another function and get parameter conversion
-    modelFile=dirname(@__FILE__)*"/"*DSM1D.dsm1Dconfig.modelFolder*"/"*DSM1D.input.modelFile
+    modelFile=dirname(@__FILE__)*"/"*planet1D.dsm1Dconfig.modelFolder*"/"*planet1D.input.modelFile
     @time my1DDSMmodel=read1DModel(modelFile)
 
     # for kernel computations, it is still interesting to make a regular grid in r and θ
@@ -34,7 +34,7 @@ module planet1D
 
 
     # Here we make vertical grids in radius for the DSM computation
-    include("planet1D/DSM1Dmotor.jl")
+    include("planet1D/planet1Dmotor.jl")
 
 
-end # module DSM1D
+end # module planet1D
