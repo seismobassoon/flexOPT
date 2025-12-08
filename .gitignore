@@ -1,0 +1,30 @@
+# Julia specific
+
+*.jl~                 # temporary Julia files
+*.jld                 # data files, optional
+*.ji                  # compiled files
+
+# Local files 
+*_local.jl
+*_local.ipynb
+
+# Julia artifacts
+
+Manifest.toml          # optional: include if you want reproducibility
+.julia/
+deps/
+logs/
+
+# VSCode
+
+.vscode/
+*.code-workspace
+
+# Jupyter checkpoints
+
+.ipynb_checkpoints/
+
+# OS generated files
+
+.DS_Store
+Thumbs.db
