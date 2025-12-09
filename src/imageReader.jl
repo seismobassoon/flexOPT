@@ -5,6 +5,6 @@ module imageReader
 
     include("imageReader/imageReader.jl")
 
-    export read2DimageModel
+    export read2DimageModel, defineModel
 
 end
