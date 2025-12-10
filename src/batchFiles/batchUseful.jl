@@ -12,11 +12,6 @@ macro var2string(var)
 end
 
 
-function myTemporaryFiles(x)
-    xString=var2string(x)
-    mkdir("./tmp"; exist_ok=true)
-    @save "./tmp"*xString*".jld2" x
-end
 
 function reinterpolateArrayMembers(Ncolor,nSegments)
     nColors = Array{Int}(undef,nSegments)

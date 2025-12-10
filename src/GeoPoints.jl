@@ -11,12 +11,8 @@ module GeoPoints
 
 
     using ..planet1D
-    
-    # batch files
+    using ..commonBatch
 
-  
-    include("batchFiles/batchDrWatson.jl")
-    include("batchFiles/batchImages.jl")
 
     # specific functions: former GeoPoints
     include("GeoPoints/GeoPoints.jl")

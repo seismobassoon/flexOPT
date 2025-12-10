@@ -1,5 +1,6 @@
-using DrWatson
+using DrWatson, JLD2
 using SHA
+using FilePathsBase: mkpath
 
 function hash_parameters(params)
     # Serialize as string and hash
@@ -27,4 +28,29 @@ function myProduceOrLoad(functionName,paramDict,directoryName::String,prefixName
     
     return output
 
+end
+
+
+# lazy version of myProduceOrLoad
+
+function lazyProduceOrLoad(x, f, args...; folder="./tmp", kwargs...)
+    # Ensure the folder exists
+    mkpath(folder)
+    
+    # Build filename
+    xString = string(x)
+    filename = joinpath(folder, xString * ".jld2")
+    
+    if isfile(filename)
+        # Load saved result
+        println("Loading from ", filename)
+        @load filename output
+        return output
+    else
+        # Compute and save
+        println("Computing ", xString)
+        output = f(args...;kwargs)  # call the function with parameters
+        @save filename output
+        return output
+    end
 end
