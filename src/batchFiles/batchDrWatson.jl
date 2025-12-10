@@ -1,5 +1,4 @@
 using DrWatson
-
 using SHA
 
 function hash_parameters(params)

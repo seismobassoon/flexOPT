@@ -1,6 +1,31 @@
 
+function getTopoViaGMT(params::Dict)
+    @unpack precision, region = params
+    resolution=String(chopprefix(precision, "@earth_relief_"))
+    if DEFAULT_PLANET[] === :Mars
+        G = gmtread(remotegrid("mars", res = resolution))
+    elseif DEFAULT_PLANET[] === :Earth
+        # do nothing
+    else
+        @show "not yet coded for your planet"
+    end
+
+    topo = GMT.grdcut(precision, region=region)
+    return @strdict(topo)
+end
 
 function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
+
+    params = @strdict allGridsInGeoPoints=allGridsInGeoPoints effectiveRadii=effectiveRadii precisionInKm=precisionInKm NradiusNodes=NradiusNodes eps=eps VpWater=VpWater ρWater=ρWater VpAir=VpAir ρAir=ρAir hasAirModel=hasAirModel
+
+    seismicModel = myProduceOrLoad(getParamsAndTopo,params,"seismiModel")
+
+    return seismicModel["seismicModel"]
+end
+
+function getParamsAndTopo(params::Dict)
+
+    @unpack allGridsInGeoPoints, effectiveRadii,precisionInKm,NradiusNodes,eps,VpWater,ρWater,VpAir,ρAir,hasAirModel = params
 
     
     #@enum Couche Graine Noyau Manteau Océane Atmosphère Ionosphère Dehors
@@ -133,7 +158,7 @@ function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Floa
     end
 
 
-    return seismicModel
+    return @strdict(seismicModel)
 
 end
 

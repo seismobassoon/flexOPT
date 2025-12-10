@@ -1,3 +1,4 @@
+
 function defineModel(file::String;modelDefinitionMethod="2DimageFile",colormap="jet")
 
     model = nothing

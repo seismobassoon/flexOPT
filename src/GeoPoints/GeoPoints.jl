@@ -1,22 +1,6 @@
 DEFAULT_PLANET = Ref(:Earth) #set_default_planet! can change this
 
 
-function getTopoViaGMT(params::Dict)
-    @unpack precision, region = params
-    resolution=String(chopprefix(precision, "@earth_relief_"))
-    if DEFAULT_PLANET[] === :Mars
-        G = gmtread(remotegrid("mars", res = resolution))
-    elseif DEFAULT_PLANET[] === :Earth
-        # do nothing
-    else
-        @show "not yet coded for your planet"
-    end
-
-    topo = GMT.grdcut(precision, region=region)
-    return @strdict(topo)
-end
-
-
 # Planetary parameters (semi-major axis `a` in meters, flattening `f`)
 
 function planet_ellipsoid(name::Symbol)
