@@ -3,15 +3,14 @@
 module GeoPoints
     # be careful, this module needs planet1D
 
+
+    using ..planet1D
+    using ..commonBatchs
     using Geodesy, StaticArrays,LinearAlgebra,GMT, UnPack
     using Interpolations
     using FileIO,CairoMakie
     
     import Base: +,-,/,*
-
-
-    using ..planet1D
-    using ..commonBatch
 
 
     # specific functions: former GeoPoints

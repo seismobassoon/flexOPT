@@ -1,4 +1,4 @@
-module commonBatch
+module commonBatchs
 
     # batch files
 
