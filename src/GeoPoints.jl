@@ -32,7 +32,7 @@ module GeoPoints
     export GeoPoint, +, -, /, *
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
-    export getParamsAndTopo, interpolate_params, GMTprecision
+    export getParamsAndTopo #, interpolate_params, GMTprecision
 
     
     # functions imageReader

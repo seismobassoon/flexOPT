@@ -14,18 +14,7 @@ function getTopoViaGMT(params::Dict)
     return @strdict(topo)
 end
 
-function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
-
-    params = @strdict allGridsInGeoPoints=allGridsInGeoPoints effectiveRadii=effectiveRadii precisionInKm=precisionInKm NradiusNodes=NradiusNodes eps=eps VpWater=VpWater ρWater=ρWater VpAir=VpAir ρAir=ρAir hasAirModel=hasAirModel
-
-    seismicModel = myProduceOrLoad(getParamsAndTopo,params,"seismiModel")
-
-    return seismicModel["seismicModel"]
-end
-
-function getParamsAndTopo(params::Dict)
-
-    @unpack allGridsInGeoPoints, effectiveRadii,precisionInKm,NradiusNodes,eps,VpWater,ρWater,VpAir,ρAir,hasAirModel = params
+function getParamsAndTopo(allGridsInGeoPoints,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
 
     
     #@enum Couche Graine Noyau Manteau Océane Atmosphère Ionosphère Dehors
@@ -61,8 +50,8 @@ function getParamsAndTopo(params::Dict)
     ΔradiusIncrementInKm = (maximum(effectiveRadii)-minimum(effectiveRadii))/(tmpNradiusNodes-1) *1.e-3
     linearRadiiInKm =(collect(1:1:NradiusNodes) .- 1)*ΔradiusIncrementInKm .+ minimum(effectiveRadii)*1.e-3
 
-    push!(linearRadiiInKm, planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer) 
-    newRadii,params=planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel,linearRadiiInKm,"below")
+    push!(linearRadiiInKm, DSM1D.my1DDSMmodel.averagedPlanetRadiusInKilometer) 
+    newRadii,params=DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel,linearRadiiInKm,"below")
 
 
     # get the extremeties in lat and lon
@@ -122,7 +111,7 @@ function getParamsAndTopo(params::Dict)
         tmpPoint = allGridsInGeoPoints[i]
         if 0.0 < tmpPoint.alt <= topoInterpolater(tmpPoint.lon,tmpPoint.lat) 
             # it might be very time-consuming if we do this for 3D Cartesian points ...
-            effectiveRadii[i]=planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
+            effectiveRadii[i]=DSM1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
      
         end
 
@@ -158,7 +147,7 @@ function getParamsAndTopo(params::Dict)
     end
 
 
-    return @strdict(seismicModel)
+    return seismicModel
 
 end
 

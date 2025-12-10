@@ -1,5 +1,5 @@
 # In this code, I collect some useful macros and functions 
-using LinearAlgebra
+using LinearAlgebra, JLD2
 
 #good old safeget
 safeget(A, inds...; default=0) = checkbounds(Bool, A, inds...) ? A[inds...] : default
@@ -9,6 +9,13 @@ safeget(A, inds...; default=0) = checkbounds(Bool, A, inds...) ? A[inds...] : de
 # https://discourse.julialang.org/t/can-i-use-a-function-variable-name-to-generate-a-string-to-set-it-equal-to/73659
 macro var2string(var)
     :($(esc(var)) = $(String(var)))
+end
+
+
+function myTemporaryFiles(x)
+    xString=var2string(x)
+    mkdir("./tmp"; exist_ok=true)
+    @save "./tmp"*xString*".jld2" x
 end
 
 function reinterpolateArrayMembers(Ncolor,nSegments)
