@@ -269,12 +269,19 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,a
 end
 
 
-function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64=0.0,rightLimit::Float64=(p2-p1).radius)
+function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64=0.0,rightLimit::Float64=(p2-p1).radius,centreOption="middle")
 
     # 3D
 
     R=makeLocalCoordinateUnitVectors(p1,p2) 
-    pOrigin = p1.ecef # p1 centred coordinates
+    pOrigin = nothing
+    if centreOption === "p1"
+        pOrigin = p1.ecef # p1 centred coordinates
+    elseif centreOption === "middle"
+        pMiddle = (p1+p2)/2.0
+        pOrigin = GeoPoint(pMiddle.lat,pMiddle.lon) # the middle point centred coordinates
+    end
+
     pCentre = SVector(0.0,0.0,0.0) # This is the default centre of the planet to measure the local vertical vectors
 
     Nx = Int64((rightLimit-leftLimit) ÷ Δx+1) 
