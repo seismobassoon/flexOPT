@@ -36,3 +36,4 @@ function defineModel(file::String;modelDefinitionMethod="2DimageFile",colormap="
     end
     return model
 end
+

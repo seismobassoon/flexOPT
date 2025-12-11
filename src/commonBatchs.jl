@@ -7,6 +7,7 @@ module commonBatchs
     include("batchFiles/batchImages.jl")
 
 
-    export myProduceOrLoad, lazyProduceOrLoad
+    export myProduceOrLoad, lazyProduceOrLoad, @strdict
+    export getColorPalette, regenerataionColorMap, color2Float
 
 end

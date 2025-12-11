@@ -14,7 +14,15 @@ function getTopoViaGMT(params::Dict)
     return @strdict(topo)
 end
 
-function getParamsAndTopo(allGridsInGeoPoints,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
+
+function initiateSeismicModel(newArray::Array)
+    seismicModel=(ρ=zeros(Float64,size(newArray)...),Vpv=zeros(Float64,size(newArray)...),Vph=zeros(Float64,size(newArray)...),Vsv=zeros(Float64,size(newArray)...),Vsh=zeros(Float64,size(newArray)...),Qμ=zeros(Float64,size(newArray)...),Qκ=zeros(Float64,size(newArray)...),QμPower=zeros(Float64,size(newArray)...),QκPower=zeros(Float64,size(newArray)...),η=zeros(Float64,size(newArray)...))
+    return seismicModel
+end
+
+
+
+function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
 
     
     #@enum Couche Graine Noyau Manteau Océane Atmosphère Ionosphère Dehors
@@ -36,8 +44,10 @@ function getParamsAndTopo(allGridsInGeoPoints,precisionInKm::Float64;NradiusNode
     precision = GMTprecision(precisionInKm)  # this should be in Km
 
 
-    seismicModel=(ρ=zeros(Float64,size(allGridsInGeoPoints)...),Vpv=zeros(Float64,size(allGridsInGeoPoints)...),Vph=zeros(Float64,size(allGridsInGeoPoints)...),Vsv=zeros(Float64,size(allGridsInGeoPoints)...),Vsh=zeros(Float64,size(allGridsInGeoPoints)...),Qμ=zeros(Float64,size(allGridsInGeoPoints)...),Qκ=zeros(Float64,size(allGridsInGeoPoints)...),QμPower=zeros(Float64,size(allGridsInGeoPoints)...),QκPower=zeros(Float64,size(allGridsInGeoPoints)...),η=zeros(Float64,size(allGridsInGeoPoints)...))
+    #seismicModel=(ρ=zeros(Float64,size(allGridsInGeoPoints)...),Vpv=zeros(Float64,size(allGridsInGeoPoints)...),Vph=zeros(Float64,size(allGridsInGeoPoints)...),Vsv=zeros(Float64,size(allGridsInGeoPoints)...),Vsh=zeros(Float64,size(allGridsInGeoPoints)...),Qμ=zeros(Float64,size(allGridsInGeoPoints)...),Qκ=zeros(Float64,size(allGridsInGeoPoints)...),QμPower=zeros(Float64,size(allGridsInGeoPoints)...),QκPower=zeros(Float64,size(allGridsInGeoPoints)...),η=zeros(Float64,size(allGridsInGeoPoints)...))
 
+
+    seismicModel = initiateSeismicModel(allGridsInGeoPoints)
 
     # get the extremeties in radius
 
@@ -50,8 +60,8 @@ function getParamsAndTopo(allGridsInGeoPoints,precisionInKm::Float64;NradiusNode
     ΔradiusIncrementInKm = (maximum(effectiveRadii)-minimum(effectiveRadii))/(tmpNradiusNodes-1) *1.e-3
     linearRadiiInKm =(collect(1:1:NradiusNodes) .- 1)*ΔradiusIncrementInKm .+ minimum(effectiveRadii)*1.e-3
 
-    push!(linearRadiiInKm, DSM1D.my1DDSMmodel.averagedPlanetRadiusInKilometer) 
-    newRadii,params=DSM1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(DSM1D.my1DDSMmodel,linearRadiiInKm,"below")
+    push!(linearRadiiInKm, planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer) 
+    newRadii,params=planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel,linearRadiiInKm,"below")
 
 
     # get the extremeties in lat and lon
@@ -111,7 +121,7 @@ function getParamsAndTopo(allGridsInGeoPoints,precisionInKm::Float64;NradiusNode
         tmpPoint = allGridsInGeoPoints[i]
         if 0.0 < tmpPoint.alt <= topoInterpolater(tmpPoint.lon,tmpPoint.lat) 
             # it might be very time-consuming if we do this for 3D Cartesian points ...
-            effectiveRadii[i]=DSM1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
+            effectiveRadii[i]=planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
      
         end
 

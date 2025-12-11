@@ -33,12 +33,12 @@ end
 
 # lazy version of myProduceOrLoad
 
-function lazyProduceOrLoad(x, f, args...; folder="./tmp", kwargs...)
+function lazyProduceOrLoad(xString::String, f, args...; folder="./tmp", kwargs...)
     # Ensure the folder exists
     mkpath(folder)
     
     # Build filename
-    xString = string(x)
+
     filename = joinpath(folder, xString * ".jld2")
     
     if isfile(filename)
@@ -49,8 +49,25 @@ function lazyProduceOrLoad(x, f, args...; folder="./tmp", kwargs...)
     else
         # Compute and save
         println("Computing ", xString)
-        output = f(args...;kwargs)  # call the function with parameters
+        output = isempty(kwargs) ? f(args...) : f(args...; kwargs...)
         @save filename output
         return output
     end
+end
+
+
+function lazyProduceOrLoad(xString::String;folder="./tmp")
+
+    # this is very much lazy
+    filename = joinpath(folder, xString * ".jld2")
+    if isfile(filename)
+        println("This is the laziest ProduceOrLoad")
+        println("Loading from ", filename)
+        @load filename output
+        return output
+    else 
+        @error(filename, "does not exit! This is the laziest ProduceOrLoad")
+        return
+    end
+
 end

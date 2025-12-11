@@ -62,10 +62,10 @@ end
 
 #greenColorMap=[RGB(1.0,1.0,1.0),RGB(0.0,1.0,0.0)]
 
-#file="DSM1D/data/model/random/colourful.jpg"
-#file="DSM1D/data/model/artemis/IMG_6098.jpeg"
-#file="DSM1D/data/model/random/marmousi.png"
-#file="DSM1D/data/model/random/tmp.png"
+#file="planet1D/data/model/random/colourful.jpg"
+#file="planet1D/data/model/artemis/IMG_6098.jpeg"
+#file="planet1D/data/model/random/marmousi.png"
+#file="planet1D/data/model/random/tmp.png"
 
 #read2DimageModel(file,"jet";Nwidth=101,Nheight=202)
 
