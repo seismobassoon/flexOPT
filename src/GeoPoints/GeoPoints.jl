@@ -318,5 +318,5 @@ end
 
 function contructLocalBox(Nx::Int,Ny::Int,Nz::Int,xStart::Float64,yStart::Float64,zStart::Float64,Δx::Float64,Δy::Float64,Δz::Float64;pOrigin::GeoPoint=GeoPoint(0.0,0.0),pushingSurfacetoSphere=false)
     # here it will make all necessary arrays based on a local 
-
+    
 end
