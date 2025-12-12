@@ -269,17 +269,20 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,a
 end
 
 
+
 function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64=0.0,rightLimit::Float64=(p2-p1).radius,centreOption="middle")
 
     # 3D
 
     R=makeLocalCoordinateUnitVectors(p1,p2) 
     pOrigin = nothing
+    xOrigin = 0.0
     if centreOption === "p1"
         pOrigin = p1.ecef # p1 centred coordinates
     elseif centreOption === "middle"
         pMiddle = (p1+p2)/2.0
-        pOrigin = GeoPoint(pMiddle.lat,pMiddle.lon) # the middle point centred coordinates
+        pOrigin = GeoPoint(pMiddle.lat,pMiddle.lon).ecef # the middle point centred coordinates at the surface (altitude=0.0)
+        xOrigin = -(p2-p1).radius/2.0
     end
 
     pCentre = SVector(0.0,0.0,0.0) # This is the default centre of the planet to measure the local vertical vectors
@@ -299,7 +302,7 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         
         ix, iy, iz = Tuple(iXYZ)
         
-        tmpLocalPoint=localCoord3D(ix,iy,iz,Δx,Δy,Δz,pOrigin,R;startX=leftLimit-Δx,startY=奥行きMin-Δy,startZ=altMin-Δz,pCentre=pCentre)
+        tmpLocalPoint=localCoord3D(ix,iy,iz,Δx,Δy,Δz,pOrigin,R;startX=xOrigin+leftLimit-Δx,startY=奥行きMin-Δy,startZ=altMin-Δz,pCentre=pCentre)
         tmpGeoPoint=GeoPoint(p_local_to_ECEF(tmpLocalPoint.xyz,pOrigin,R))
         
         allGridsInGeoPoints[iXYZ]=tmpGeoPoint
@@ -312,3 +315,8 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
     
 end
 
+
+function contructLocalBox(Nx::Int,Ny::Int,Nz::Int,xStart::Float64,yStart::Float64,zStart::Float64,Δx::Float64,Δy::Float64,Δz::Float64;pOrigin::GeoPoint=GeoPoint(0.0,0.0),pushingSurfacetoSphere=false)
+    # here it will make all necessary arrays based on a local 
+
+end
