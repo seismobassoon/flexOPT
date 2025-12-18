@@ -1,4 +1,7 @@
 
+using Colors
+
+
 function read2DimageModel(file,cmap;min=0.0,max=1.0,showRecoveredImage=true,Nheight=nothing,Nwidth=nothing)
     
     if cmap isa String
