@@ -1,5 +1,5 @@
 
-using Colors
+using Colors, Interpolations
 
 
 function read2DimageModel(file,cmap;min=0.0,max=1.0,showRecoveredImage=true,Nheight=nothing,Nwidth=nothing)
@@ -14,8 +14,7 @@ function read2DimageModel(file,cmap;min=0.0,max=1.0,showRecoveredImage=true,Nhei
     return float_array
 end
 
-
-function read2DimageModel(file; Ncolor=256, colorbar = [RGB(0.0, 0.0, 1.0), RGB(0.0, 1.0, 0.0), RGB(1.0, 0.0, 0.0)] ,values = [0.0, 0.5, 1.0], lowestColor=nothing,highestColor=nothing,Nheight=nothing,Nwidth=nothing,showRecoveredImage=true)
+function read2DimageModel(file; Ncolor=256, colorbar = [RGB(0.0, 0.0, 1.0), RGB(0.0, 1.0, 0.0), RGB(1.0, 0.0, 0.0)] ,values = [0.0, 0.5, 1.0], lowestColor=nothing,highestColor=nothing,Nheight=nothing,Nwidth=nothing,showRecoveredImage=true,reverseOrNot=false)
 
     # Read RGB and take the absolute value
 
@@ -51,19 +50,23 @@ function read2DimageModel(file; Ncolor=256, colorbar = [RGB(0.0, 0.0, 1.0), RGB(
     # Define colorbar and corresponding float values
     
 
+    if reverseOrNot   
+        float_array= Matrix(transpose(float_array[end:-1:1,:]))
+    else
+        float_array= Matrix(transpose(float_array))    
+    end
+    
+
     if showRecoveredImage
    
         newColorBar,newValues=regenerataionColorMap(colorbar,values,Ncolor)
-        scene = heatmap(transpose(float_array[end:-1:1,:]), colormap =  newColorBar,colorrange=(values[1],values[end]))
+        scene = heatmap(float_array, colormap =  newColorBar,colorrange=(values[1],values[end]))
         display(scene)
     end
-   
-    return Matrix(transpose(float_array)[end:-1:1,:])
-    
+    return float_array
 end
 
-
-function ajustArray(A::AbstractArray, B::AbstractArray)
+function adjustArray(A::AbstractArray, B::AbstractArray)
     # interpolate the array B on the A's grid
     sizeA = size(A)
     sizeB = size(B)
@@ -73,7 +76,7 @@ function ajustArray(A::AbstractArray, B::AbstractArray)
     end
 
     # Create interpolation object for B
-    itpB = interpolate(B, BSpline(Linear()))
+    itpB = interpolate(B,BSpline(Linear()), OnGrid())
     itpB_scaled = scale(itpB, ntuple(i->1:sizeB[i], N)...)
     
     # Build query ranges for each dimension (map A's grid onto B)
@@ -88,7 +91,6 @@ function ajustArray(A::AbstractArray, B::AbstractArray)
     
     return newB
 end
-
 #greenColorMap=[RGB(1.0,1.0,1.0),RGB(0.0,1.0,0.0)]
 
 #file="planet1D/data/model/random/colourful.jpg"

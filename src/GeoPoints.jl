@@ -35,5 +35,5 @@ module GeoPoints
     # functions imageReader
     export defineModel
     export read2DimageModel
-    export ajustArray
+    export adjustArray
 end
