@@ -58,7 +58,7 @@ function read2DimageModel(file; Ncolor=256, colorbar = [RGB(0.0, 0.0, 1.0), RGB(
         display(scene)
     end
    
-    return Matrix(transpose(float_array))
+    return Matrix(transpose(float_array)[end:-1:1,:])
     
 end
 
