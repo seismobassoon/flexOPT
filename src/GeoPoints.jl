@@ -9,7 +9,7 @@ module GeoPoints
     using Geodesy, StaticArrays,LinearAlgebra,GMT, UnPack
     using Interpolations
     using FileIO,CairoMakie
-    
+    using Colors, Images
     import Base: +,-,/,*
 
 
@@ -30,9 +30,10 @@ module GeoPoints
     export getParamsAndTopo #, interpolate_params, GMTprecision
     export makeAdHocSeismicModel,initiateSeismicModel # soon we need to make a structure of seismicModel (1D-3D)
     
+
+
     # functions imageReader
     export defineModel
     export read2DimageModel
-
-
+    export ajustArray
 end

@@ -55,10 +55,36 @@ function read2DimageModel(file; Ncolor=256, colorbar = [RGB(0.0, 0.0, 1.0), RGB(
         display(scene)
     end
    
-    return float_array
+    return Matrix(transpose(float_array))
     
 end
 
+
+function ajustArray(A::AbstractArray, B::AbstractArray)
+    # interpolate the array B on the A's grid
+    sizeA = size(A)
+    sizeB = size(B)
+    N = ndims(A)
+    if N!=ndims(B)
+        @error("dimension mismatch from ajustArray in imageReader.jl")
+    end
+
+    # Create interpolation object for B
+    itpB = interpolate(B, BSpline(Linear()))
+    itpB_scaled = scale(itpB, ntuple(i->1:sizeB[i], N)...)
+    
+    # Build query ranges for each dimension (map A's grid onto B)
+    ranges = ntuple(i -> range(1, stop=sizeB[i], length=sizeA[i]), N)
+    
+    # Use CartesianIndices to iterate over all combinations
+    newB = similar(A)
+    for idx in CartesianIndices(newB)
+        coords = ntuple(d -> ranges[d][idx[d]], N)
+        newB[idx] = itpB_scaled(coords...)
+    end
+    
+    return newB
+end
 
 #greenColorMap=[RGB(1.0,1.0,1.0),RGB(0.0,1.0,0.0)]
 

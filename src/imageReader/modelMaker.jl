@@ -18,7 +18,7 @@ function defineModel(file::String;modelDefinitionMethod="2DimageFile",colormap="
 
         if modelDefinitionMethod === "2DimageFile"
             imagefile = file
-            colormap = "jet" #colormap can be RGB vector or predefined colormap
+            #colormap = "jet" #colormap can be RGB vector or predefined colormap
 
             #model=read2DimageModel(imagefile,colormap;Nwidth=10,Nheight=10,showRecoveredImage=false)
             model=read2DimageModel(imagefile,colormap;showRecoveredImage=false)
@@ -34,6 +34,6 @@ function defineModel(file::String;modelDefinitionMethod="2DimageFile",colormap="
 
     #endregion
     end
-    return transpose(model)
+    return model
 end
 
