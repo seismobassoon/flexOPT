@@ -15,6 +15,23 @@ function getTopoViaGMT(params::Dict)
 end
 
 
+
+function makeAdHocSeismicModel(modelArray::Array, ρMin, ρMax, VpvMin, VpvMax, VsvMin, VsvMax; VphMin=VpvMin, VphMax=VpvMax, VshMin=VsvMin, VshMax=VsvMax, QμMin = 0.0, QμMax=0.0, QκMin = 0.0, QκMax = 0.0, QμPowerMin = 0.0, QμPowerMax = 0.0, QκPowerMin = 0.0, QκPowerMax = 0.0, ηMin = 1.0, ηMax = 1.0)
+    #if 'modelArray' is described in 0.0-1.0 range
+    seismicModel = initiateSeismicModel(modelArray)
+    @. seismicModel.ρ = ρMin + modelArray*(ρMax-ρMin)
+    @. seismicModel.Vpv = VpvMin + modelArray*(VpvMax-VpvMin)
+    @. seismicModel.Vph = VphMin + modelArray*(VphMax-VphMin)
+    @. seismicModel.Vsv = VsvMin + modelArray*(VsvMax-VsvMin)
+    @. seismicModel.Vsh = VshMin + modelArray*(VshMax-VshMin)
+    @. seismicModel.Qμ  = QμMin  + modelArray*(QμMax - QμMin)
+    @. seismicModel.Qκ  = QκMin  + modelArray*(QκMax - QκMin)
+    @. seismicModel.QμPower = QμPowerMin + modelArray*(QμPowerMax-QμPowerMin)
+    @. seismicModel.QκPower = QκPowerMin + modelArray*(QκPowerMax-QκPowerMin)
+    @. seismicModel.η = ηMin + modelArray*(ηMax-ηMin)
+    return seismicModel
+end
+
 function initiateSeismicModel(newArray::Array)
     seismicModel=(ρ=zeros(Float64,size(newArray)...),Vpv=zeros(Float64,size(newArray)...),Vph=zeros(Float64,size(newArray)...),Vsv=zeros(Float64,size(newArray)...),Vsh=zeros(Float64,size(newArray)...),Qμ=zeros(Float64,size(newArray)...),Qκ=zeros(Float64,size(newArray)...),QμPower=zeros(Float64,size(newArray)...),QκPower=zeros(Float64,size(newArray)...),η=zeros(Float64,size(newArray)...))
     return seismicModel

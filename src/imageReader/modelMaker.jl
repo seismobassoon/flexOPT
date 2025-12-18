@@ -34,6 +34,6 @@ function defineModel(file::String;modelDefinitionMethod="2DimageFile",colormap="
 
     #endregion
     end
-    return model
+    return transpose(model)
 end
 
