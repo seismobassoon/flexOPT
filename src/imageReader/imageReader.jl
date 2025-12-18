@@ -2,7 +2,7 @@
 using Colors, Interpolations
 
 
-function read2DimageModel(file,cmap;min=0.0,max=1.0,showRecoveredImage=true,Nheight=nothing,Nwidth=nothing)
+function read2DimageModel(file,cmap;min=0.0,max=1.0,showRecoveredImage=true,reverseOrNot=false,Nheight=nothing,Nwidth=nothing)
     
     if cmap isa String
         cmap=getColorPalette(cmap)
@@ -10,7 +10,7 @@ function read2DimageModel(file,cmap;min=0.0,max=1.0,showRecoveredImage=true,Nhei
     
     rgbpoints=length(cmap)
     values=range(min,max,rgbpoints)
-    float_array=read2DimageModel(file; colorbar=cmap,values=values,showRecoveredImage=showRecoveredImage,Nheight,Nwidth)
+    float_array=read2DimageModel(file; colorbar=cmap,values=values,showRecoveredImage=showRecoveredImage,reverseOrNot=reverseOrNot,Nheight,Nwidth)
     return float_array
 end
 
