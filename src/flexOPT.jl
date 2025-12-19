@@ -1,7 +1,7 @@
 module flexOPT
 
     using Symbolics,UnPack,Tullio
-
+    using ..commonBatchs
     # batch files
 
     include("batchFiles/batchSymbolics.jl")
@@ -15,9 +15,9 @@ module flexOPT
     include("motorsOPT/WYYKK.jl")
     export getIntegralWYYKK
     include("motorsOPT/others.jl")
-    export findCartesianDependency, makeMixPartials,varMmaker,PDECoefFinder
-    
-
+    export findCartesianDependency, makeMixPartials,varMmaker,PDECoefFinder,timeDimensionString
+    include("motorsOPT/OPTEngines.jl")
+    export OPTobj
     
     # famous equations
     include("motorsOPT/famousEquations.jl")

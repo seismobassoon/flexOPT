@@ -8,7 +8,7 @@ module commonBatchs
     include("batchFiles/batchUseful.jl")
 
 
-    export myProduceOrLoad, lazyProduceOrLoad, @strdict
+    export myProduceOrLoad,lazyProduceOrLoad, @strdict
     export getColorPalette, regenerataionColorMap, color2Float
     export var2string,reinterpolateArrayMembers,expandVectors,string_as_varname
     export car2vec,carDropDim,carAddDim,vec2car

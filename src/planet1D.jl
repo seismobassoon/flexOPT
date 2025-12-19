@@ -1,23 +1,22 @@
 module planet1D
-# This module will include all the functions needed to run the 1D DSM
-# Packages that should be installed before running the DSM:
+    # This module will include all the functions needed to run the 1D DSM
+    # Packages that should be installed before running the DSM:
 
-# - SeisBase
-# - Metal (or CUDA if we work for NVIDIA GPUs)
-# - DelimitedFiles
-# - Test
+    # - SeisBase
+    # - Metal (or CUDA if we work for NVIDIA GPUs)
+    # - DelimitedFiles
+    # - Test
 
-# external packages
+    # external packages
 
-#using Metal # This should be replaced by CUDA if we work for NVIDIA GPUs 
-            # https://github.com/SciML/DiffEqGPU.jl
-#using SeisBase
+    #using Metal # This should be replaced by CUDA if we work for NVIDIA GPUs 
+        # https://github.com/SciML/DiffEqGPU.jl
+    #using SeisBase
 
 
 
 
     #greet() = print("Hello World!")
-
 
     # preprocessing 
     include("planet1D/mainStructures.jl")
@@ -35,6 +34,8 @@ module planet1D
 
     # Here we make vertical grids in radius for the DSM computation
     include("planet1D/planet1Dmotor.jl")
+
+
 
 
 end # module planet1D
