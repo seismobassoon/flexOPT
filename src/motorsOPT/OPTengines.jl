@@ -27,7 +27,7 @@ function OPTobj(operatorConfigurations::Dict)
     return @strdict(operators)
 end
 
-function OPTobj(myEquationInside; coordinates=(x,y,z,t), TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
+function OPTobj(myEquationInside, Δnum; coordinates=(x,y,z,t), TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
 
     #region General introduction, some cautions
 
@@ -86,6 +86,8 @@ function OPTobj(myEquationInside; coordinates=(x,y,z,t), TaylorOptions=(WorderBt
     fields=myEquationInside.fields
     vars=myEquationInside.vars
     coordinates=myEquationInside.coordinates
+    ∂=myEquationInside.∂
+    ∂²=myEquationInside.∂²
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
 
@@ -121,13 +123,13 @@ function OPTobj(myEquationInside; coordinates=(x,y,z,t), TaylorOptions=(WorderBt
     eachFieldDependency=ones(Int,Ndimension,NtypeofFields)
   
     for iFields in 1:NtypeofFields
-        eachFieldDependency[:,iFields]=findCartesianDependency(fields[iFields],Ndimension)
+        eachFieldDependency[:,iFields]=findCartesianDependency(fields[iFields],Ndimension,∂)
         fieldDependency = fieldDependency .* (ones(Int,Ndimension).-eachFieldDependency[:,iFields])
     end
 
 
     for iVars in 1:NtypeofMaterialVariables
-        eachVariableDependency[:,iVars]=findCartesianDependency(vars[iVars],Ndimension)
+        eachVariableDependency[:,iVars]=findCartesianDependency(vars[iVars],Ndimension,∂)
         variableDependency = variableDependency .* (ones(Int,Ndimension).-eachVariableDependency[:,iVars])
     end
 
@@ -227,7 +229,6 @@ function OPTobj(myEquationInside; coordinates=(x,y,z,t), TaylorOptions=(WorderBt
 
     #endregion
 
-
     #region obtaining the semi-symbolic expression of cost function based on eqns. 52 and 53.
 
     # before calling AuSymbolic we can manipulate pointsIndices for various boundary configurations
@@ -253,8 +254,6 @@ function OPTobj(myEquationInside; coordinates=(x,y,z,t), TaylorOptions=(WorderBt
 
 """
     #endregion
-
-
 
     #region outputs
     

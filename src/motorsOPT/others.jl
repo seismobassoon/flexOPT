@@ -3,7 +3,7 @@ timeDimensionString="t"
 # if the user does not want to use "t" for the time marching scheme, it should be changed
 # and this "t" should be the last element in coordinates
 
-function findCartesianDependency(expression,Ndimension)
+function findCartesianDependency(expression,Ndimension,∂)
     expressionDependency=ones(Int,Ndimension)
     for iDimension in 1:Ndimension
         if typeof(expand_derivatives(∂[iDimension](expression))==0) <: Bool 
