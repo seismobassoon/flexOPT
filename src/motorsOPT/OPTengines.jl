@@ -27,7 +27,7 @@ function OPTobj(operatorConfigurations::Dict)
     return @strdict(operators)
 end
 
-function OPTobj(exprs,fields,vars; coordinates=(x,y,z,t), TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
+function OPTobj(myEquationInside; coordinates=(x,y,z,t), TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
 
     #region General introduction, some cautions
 
@@ -82,7 +82,10 @@ function OPTobj(exprs,fields,vars; coordinates=(x,y,z,t), TaylorOptions=(WorderB
 
     #region initialising, unpacking etc. 
 
-
+    exprs=myEquationInside.exprs
+    fields=myEquationInside.fields
+    vars=myEquationInside.vars
+    coordinates=myEquationInside.coordinates
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
 
@@ -230,12 +233,15 @@ function OPTobj(exprs,fields,vars; coordinates=(x,y,z,t), TaylorOptions=(WorderB
     # before calling AuSymbolic we can manipulate pointsIndices for various boundary configurations
 
 
-    Δ = Δnum
+    #Δ = Δnum
     
 
     AjiννᶜU=[]
     Ulocal=[]
 
+    AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+
+"""
     for iConfigGeometry in eachindex(availablePointsConfigurations) 
         pointsIndices=availablePointsConfigurations[iConfigGeometry]
         middleLinearν=centrePointConfigurations[iConfigGeometry]
@@ -245,7 +251,7 @@ function OPTobj(exprs,fields,vars; coordinates=(x,y,z,t), TaylorOptions=(WorderB
         Ulocal=push!(Ulocal,tmpUlocal)
     end
 
-
+"""
     #endregion
 
 
@@ -259,4 +265,295 @@ function OPTobj(exprs,fields,vars; coordinates=(x,y,z,t), TaylorOptions=(WorderB
 
     #endregion
     
+end
+
+
+
+
+function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields;threads = 256,backend=backend)
+
+    #region preparation
+
+    
+
+    # this is fully GPU optimised version of ASymbolic 
+    nCoordinates = length(coordinates)
+    nPoints = length(pointsIndices)
+    nLs = length(multiOrdersIndices)
+    # normally we put only the centre points (in the present time)
+    # but the boundary condition requires some points a bit more challenging
+    νIndices=[pointsIndices[middleLinearν]]
+    # νIndices can be pointsIndices if one needs to look for
+    # boundary operators
+
+    L_MINUS_N = multiOrdersIndices
+    L_MINUS_N = L_MINUS_N .-L_MINUS_N[1]
+    # here L_MINUS_N is truly \mathbf{l}-\mahtbf{n} ∈ \mathbb{Z}_{≥0}
+
+    #endregion
+
+    #region we compute the integral of WYYKK in 1D domain (μ ∈ \mathbb{Z}/2 has not yet been implemented)
+
+    integral1DWYYKK = Array{Any,1}(undef,nCoordinates)
+    modifiedμ=Array{Any,1}(undef,nCoordinates)
+    for iCoord in eachindex(coordinates) # for each 
+        integralParams = @strdict oB =orderBspline[iCoord] oWB = WorderBspline[iCoord] νCoord=pointsIndices[middleLinearν][iCoord] LCoord = multiPointsIndices[end][iCoord] ΔCoord=Δ[iCoord] l_n_max=L_MINUS_N[end][iCoord]
+        output = myProduceOrLoad(getIntegralWYYKK,integralParams,"intKernel")
+        integral1DWYYKK[iCoord] = output["intKernelforνLΔ"]
+        modifiedμ[iCoord] = output["modμ"] # this can be still 'nothing'
+    end
+
+
+
+    #endregion
+
+    #region get CˡηGlobal (for ν)
+
+    coefInversionDict = @strdict coordinates multiOrdersIndices pointsIndices Δ WorderBspline modifiedμ
+
+    #@show coordinates multiOrdersIndices pointsIndices Δ WorderBspline modifiedμ
+
+    output=myProduceOrLoad(TaylorCoefInversion,coefInversionDict,"taylorCoefInv")
+    Cˡη=output["CˡηGlobal"]
+
+    #endregion 
+
+    #region objectives (Ajiννᶜ)
+
+    # the order is: (νᶜ,) ν, i, j  here
+    Ajiννᶜ = Array{Num,4}(undef,nPoints,nPoints,NtypeofFields,NtypeofExpr)
+
+    # but this will already include bigα so the coefficients for each α_{nn'ji} should be given here
+
+    #endregion
+
+    #region useful LinearIndices conversion functions
+    
+    LI_points = LinearIndices(pointsIndices)
+    LI_L_MINUS_N_plus_1 = LinearIndices(L_MINUS_N.+vec2car(ones(Int,nCoordinates)))
+  
+    #endregion
+
+    #region make the table for each (x',x,n',n) (x=η+μ)
+    nTotalSmallα = sum(length(bigα[iExpr, iField]) for iExpr in 1:NtypeofExpr, iField in 1:NtypeofFields)
+
+    tableForLoop = Array{Int32,3}(undef,2+nCoordinates*2,nLs*nLs,nTotalSmallα) # for every α it will give the l and l-n
+    
+    fill!(tableForLoop, 0)
+    indexLinearα = 1
+    for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
+        
+        α = bigα[iExpr,iField]
+        for eachα ∈ α
+            nᶜ = eachα.nᶜ - vec2car(ones(Int,nCoordinates))
+            n = eachα.n - vec2car(ones(Int,nCoordinates))
+            #nodeValue = eachα.node # not important at this point
+            # Available indices
+            Lᶜ_avail = (nᶜ .+ L_MINUS_N) ∩ L_MINUS_N
+            L_avail = (n .+ L_MINUS_N) ∩ L_MINUS_N
+            Lᶜ_Nᶜ_avail = Lᶜ_avail .- nᶜ
+            L_N_avail = L_avail .- n
+            
+            iL=1
+            for lᶜ ∈ Lᶜ_avail, l ∈ L_avail
+                
+                tableForLoop[1,iL,indexLinearα]= LI_L_MINUS_N_plus_1[lᶜ+vec2car(ones(Int,nCoordinates))]
+                tableForLoop[2,iL,indexLinearα]= LI_L_MINUS_N_plus_1[l+vec2car(ones(Int,nCoordinates))]
+                #tableForLoop[3,iL,indexLinearα]= LI_L_MINUS_N_plus_1[lᶜ-nᶜ+vec2car(ones(Int,nCoordinates))]
+                #tableForLoop[4,iL,indexLinearα]= LI_L_MINUS_N_plus_1[l-n+vec2car(ones(Int,nCoordinates))]
+                tmplᶜ_nᶜ = lᶜ-nᶜ+vec2car(ones(Int,nCoordinates))
+                tmpl_n = l-n+vec2car(ones(Int,nCoordinates))
+                for iCoord ∈ 1:nCoordinates
+                    tableForLoop[2+iCoord,iL,indexLinearα] = tmplᶜ_nᶜ[iCoord]
+                    tableForLoop[2+iCoord+nCoordinates,iL,indexLinearα] = tmpl_n[iCoord]
+                end
+
+                iL += 1
+            end
+       
+            indexLinearα += 1
+        end
+    end
+
+
+    #endregion
+
+    #region make a dictionary for μ ∈ pointsIndices and its linearised version
+
+    tableForPoints = Array{Int32,2}(undef,nCoordinates,nPoints)
+
+    for μ ∈ pointsIndices, iCoord ∈ 1:nCoordinates
+        linearisedμ = LI_points[vec2car(μ)]
+        tableForPoints[iCoord,linearisedμ]=vec2car(μ)[iCoord]
+    end
+
+    #endregion
+
+    #region adapt the arrays to the GPU backend
+    tableForPoints_gpu = Adapt.adapt(backend,tableForPoints)
+    tableForLoop_gpu = Adapt.adapt(backend,tableForLoop)
+    C_gpu = Adapt.adapt(backend,Float32.(Cˡη))
+
+
+    # Collect the size of each array
+    all_sizes = collect.(size.(integral1DWYYKK))  # vector of tuples
+
+    # Element-wise maximum across all dimensions
+    max_size = map((xs...) -> maximum(xs), all_sizes...)
+
+    int_total_float32 = Array{Float32,5}(undef, nCoordinates, max_size...)
+    int_total_float32 .= 0.f0
+    for iCoord in 1:nCoordinates
+        small_size = size(integral1DWYYKK[iCoord])
+        tmpMatrix = Float32.(integral1DWYYKK[iCoord])
+        tmpRange = CartesianIndices(tmpMatrix)
+        int_total_float32[iCoord,tmpRange] = tmpMatrix
+    end
+    int_gpu = Adapt.adapt(backend,int_total_float32)
+    
+
+
+    output_gpu = Adapt.adapt(backend, zeros(Float32, nPoints, nPoints, nTotalSmallα))
+    
+    #
+
+
+    #endregion
+    
+    #region launch GPU computation
+
+    # scalars in Int32
+    P      = Int32(nPoints)
+    L      = Int32(nLs)
+    nDim   = Int32(nCoordinates)
+    nα     = Int32(nTotalSmallα)
+    int1max = Int32(max_size[1])
+    int2max = Int32(max_size[2])
+
+    #@show typeof(output_gpu)         # must be MtlArray{Float32,3}
+    #@show typeof(C_gpu)              # must be MtlArray{Float32,3}
+    #@show typeof(int_gpu)            # must be MtlArray{Float32,5}
+    #@show typeof(tableForLoop_gpu)   # must be MtlArray{Int32,3}
+    #@show typeof(tableForPoints_gpu) # must be MtlMatrix{Int32}
+    #@show typeof(P) typeof(L) typeof(nDim) typeof(nα) typeof(int1max) typeof(int2max)
+
+    kernel! = windowContraction!(backend,(8,8,8))#,128,size(output_gpu))
+    kernel!(output_gpu, C_gpu, int_gpu, tableForLoop_gpu,tableForPoints_gpu,
+       P,L,nDim,nα,int1max,int2max,ndrange=size(output_gpu))
+    KernelAbstractions.synchronize(backend)
+
+    # Here output_gpu[x',x,eachα] ∑μ' ∑μ ∑l' ∑ l C[x',l',μ'] C[x,l,μ] ∏_iCoord K[iCoord][μ',μ,l'-n',l-n]
+    # with (n',n) depends on eachα and x=η+μ
+
+    @show "GPU computation of Ajiννᶜ: done"
+    output = Adapt.adapt(CPU(), output_gpu)
+    #endregion
+
+
+    #region contruct Ulocal
+
+    # the order is: (νᶜ,) ν, i, j  here
+
+    Ulocal = Array{Num,2}(undef,length(pointsIndices),NtypeofFields)
+    for iField in eachindex(fields)
+        newstring=split(string(fields[iField]),"(")[1]
+        Ulocal[:,iField]=Symbolics.variables(Symbol(newstring),1:length(pointsIndices))
+    end
+
+    #endregion
+
+    #region make Ajiννᶜ and AjiννᶜU symbolically (which we will soon remove!)
+    Ajiννᶜ = Array{Num,3}(undef,length(pointsIndices),NtypeofFields,NtypeofExpr)
+    AjiννᶜU = Array{Num,1}(undef,NtypeofExpr)
+    
+    # this is the cost function for ν point so the number of elements is just the number of expressions (governing equations)
+    Ajiννᶜ .= 0
+    AjiννᶜU .= 0
+    indexLinearα = 1
+   
+    for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
+        α = bigα[iExpr,iField]
+        for eachα ∈ α
+            @show nodeValue=eachα.node
+            for x ∈ pointsIndices
+                xLinear = LI_points[vec2car(x)]
+                
+                localmapηᶜ=Dict()
+                for iVar ∈ eachindex(vars)
+                    localmapηᶜ[vars[iVar]]=varM[iVar,xLinear][]
+                end
+                for xᶜ ∈ pointsIndices
+                    xᶜLinear = LI_points[vec2car(xᶜ)]
+                    U_HERE = Ulocal[xᶜLinear,iField]                    
+                    substitutedValue = substitute(nodeValue, localmapηᶜ)
+                    Ajiννᶜ[xᶜLinear,iField,iExpr] += Float64(output[xᶜLinear,xLinear,indexLinearα])*substitutedValue
+                    AjiννᶜU[iExpr]+= Ajiννᶜ[xᶜLinear,iField,iExpr] * U_HERE
+                end
+
+            end
+            indexLinearα += 1
+        end
+
+    end
+
+
+    #endregion
+
+
+    return AjiννᶜU,Ulocal, output
+end 
+
+
+
+@kernel function windowContraction!(
+    output::AbstractArray{Float32,3},   # Array{Float32,3} on GPU: (P,P,nalpha)
+    C::AbstractArray{Float32,3},        # Array{Float32,3} on GPU: (P,L,P)
+    int::AbstractArray{Float32,5},    # Array{Float32,5} on GPU: (nDim, int1max,int1max,int2max,int2max)
+    table::AbstractArray{Int32,3}, # Array{Int32,3} on GPU: (2+nDim*2,L*L, nalpha)
+    tablePoints::AbstractArray{Int32,2}, # Array{Int32,2} on GPU: (nDim,P)
+    #sizeOf1DIntegrals::AbstractArray{Int32,1}, # max size of 1D WYYKK integrals
+    P::Int32, L::Int32, nDim::Int32, nalpha::Int32, int1max::Int32,int2max::Int32
+)
+
+    (xᶜ, x, α) = @index(Global, NTuple)   # ← 3-D indices
+    
+    @inbounds begin
+    
+        if xᶜ ≤ size(output,1) && x ≤ size(output,2) && α ≤ size(output,3)
+
+            acc = zero(eltype(output))
+
+            for idx in 1:size(table, 2)  # iterate over all entries in table for this alpha
+                i = table[1, idx, α]
+                j = table[2, idx, α]
+                
+
+                if i >0 && j >0
+                        
+                    for μᶜ in 1:P
+                        for μ in 1:P
+                            prod_int = 1.0f0
+                            for iDim in 1:nDim
+                                
+                                k = table[2+iDim, idx, α]
+                                l = table[2+iDim+nDim, idx, α]
+                                if k >0 && l >0
+                    
+                                    mᶜ=tablePoints[iDim,μᶜ]
+                                    m=tablePoints[iDim,μ]
+
+                                    prod_int *= int[iDim, mᶜ, m, k, l]
+                        
+                                end
+                            end
+                            acc += C[xᶜ, i, μᶜ] * C[x, j, μ] * prod_int  # <- corrected x' in first C
+                        end
+                    end
+                
+                end
+            end
+
+            output[xᶜ, x, α] = acc
+        end
+    end
 end
