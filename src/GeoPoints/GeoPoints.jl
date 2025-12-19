@@ -264,8 +264,12 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,al
     奥行きMin=0.0 # y axis range
     奥行きMax=1.0
     arrayModel3D = zeros(typeof(arrayModel[1]),size(arrayModel)[1],1,size(arrayModel)[2])
-    allGridsInGeoPoints, allGridsInCartesian, effectiveRadii=constructLocalBox(arrayModel3D,altMin,altMax,leftLimit, rightLimit,奥行きMin,奥行きMax; p1,p2)
-    return allGridsInGeoPoints[:,1,:], localCoord2D.(allGridsInCartesian[:,1,:]), effectiveRadii[:,1,:]
+    output=constructLocalBox(arrayModel3D,altMin,altMax,leftLimit, rightLimit,奥行きMin,奥行きMax; p1,p2)
+    allGridsInGeoPoints = output.allGridsInGeoPoints[:,1,:]
+    allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
+    effectiveRadii = output.effectiveRadii[:,1,:]
+    return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
+            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz)
 end
 
 function constructLocalBox(arrayModel::AbstractArray{<:Any,3},altMin::Float64,altMax::Float64,leftLimit::Float64, rightLimit::Float64,奥行きMin::Float64,奥行きMax::Float64; p1::GeoPoint=GeoPoint(0.0,-1.0),p2::GeoPoint=GeoPoint(0.0,1.0))
@@ -288,8 +292,8 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,3},altMin::Float64,al
         Δz = (altMax-altMin)/(Nz-1.0)
     end
     
-    allGridsInGeoPoints, allGridsInCartesian, effectiveRadii=constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit,centreOption="nothing")
-    return allGridsInGeoPoints, allGridsInCartesian, effectiveRadii
+    output=constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit,centreOption="nothing")
+    return output
 
 end
 
@@ -301,8 +305,12 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,a
     Δy = 1.0 # in metre as a dummy
     奥行きMin=0.0 # y axis range
     奥行きMax=1.0
-    allGridsInGeoPoints, allGridsInCartesian, effectiveRadii=constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit)
-    return allGridsInGeoPoints[:,1,:], localCoord2D.(allGridsInCartesian[:,1,:]), effectiveRadii[:,1,:]
+    output =constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit)
+    allGridsInGeoPoints = output.allGridsInGeoPoints[:,1,:]
+    allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
+    effectiveRadii = output.effectiveRadii[:,1,:]
+    return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
+            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz)
 end
 
 
@@ -351,7 +359,8 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         effectiveRadii[iXYZ]=effectiveRadius(tmpGeoPoint,planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 )
     end
 
-    return allGridsInGeoPoints, allGridsInCartesian, effectiveRadii
+    return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
+            Nx=Nx,Ny=Ny,Nz=Nz,Δx=Δx,Δy=Δy,Δz=Δz)
     
 end
 

@@ -1,15 +1,17 @@
-
+using KernelAbstractions
+using Adapt
 
 
 # ---------------------------------------------------------------------
 # Robust backend detection (CUDA → Metal → CPU)
 function detect_backend()
+
     if @isdefined(CUDA) && CUDA.has_cuda()
         println("→ Using CUDA backend")
         return CUDABackend()
     elseif @isdefined(Metal)
         try
-            devs = Metal.devices()
+            @show devs = Metal.devices()
             if !isempty(devs)
                 println("→ Using Metal backend (", length(devs), " device(s))")
                 return MetalBackend()

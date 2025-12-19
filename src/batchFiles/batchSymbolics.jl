@@ -1,4 +1,4 @@
-using Symbolics,UnPack,Tullio
+
 
 # this batchNewSymbolics (March 2025-) uses xyz-t coordinates since t should be the fourth coordinates for many reasons
 

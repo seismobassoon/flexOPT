@@ -23,10 +23,11 @@ julia>  famousEquations("1Dacceleration")
 ```
 """
 
-famousEquations(name::AbstractString) = famousEquation(Val(Symbol("eq_"*name)))
-
-
-
+function famousEquations(name::AbstractString) 
+    exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂²=famousEquation(Val(Symbol("eq_"*name)))
+    return (exprs=exprs, fields=fields, vars=vars, extexprs=extexprs, 
+            extfields=extfields, extvars=extvars, coordinates=coordinates, ∂=∂, ∂²=∂²)
+end
 
 function famousEquation(::Val{:eq_1Dacceleration})
      @variables u(t) ω
