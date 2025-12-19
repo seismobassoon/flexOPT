@@ -260,6 +260,7 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,al
     # this function builds very differently the local box with respect to the following constructLocalBox functions
     # most of the time the user will not care the p1 and p2 when talking about the very local Cartesian coordinates so the treatment is not propre for the moment
     # 2D
+    
     奥行きMin=0.0 # y axis range
     奥行きMax=1.0
     arrayModel3D = zeros(typeof(arrayModel[1]),size(arrayModel)[1],1,size(arrayModel)[2])
@@ -286,7 +287,8 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,3},altMin::Float64,al
     if Nz != 1
         Δz = (altMax-altMin)/(Nz-1.0)
     end
-    allGridsInGeoPoints, allGridsInCartesian, effectiveRadii=constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit,rightLimit)
+    
+    allGridsInGeoPoints, allGridsInCartesian, effectiveRadii=constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit,centreOption="nothing")
     return allGridsInGeoPoints, allGridsInCartesian, effectiveRadii
 
 end
@@ -318,6 +320,9 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         pMiddle = (p1+p2)/2.0
         pOrigin = GeoPoint(pMiddle.lat,pMiddle.lon).ecef # the middle point centred coordinates at the surface (altitude=0.0)
         xOrigin = -(p2-p1).radius/2.0
+    elseif centreOption === "nothing"
+        pOrigin = p1.ecef
+        xOrigin = 0.0
     end
 
     pCentre = SVector(0.0,0.0,0.0) # This is the default centre of the planet to measure the local vertical vectors

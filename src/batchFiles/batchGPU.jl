@@ -1,6 +1,5 @@
 
-using KernelAbstractions
-using Adapt
+
 
 # ---------------------------------------------------------------------
 # Robust backend detection (CUDA → Metal → CPU)
