@@ -8,6 +8,8 @@
 *_local.jl
 *_local.ipynb
 *_local
+
+gmt_history
 # Julia artifacts
 
 Manifest.toml          # optional: include if you want reproducibility
