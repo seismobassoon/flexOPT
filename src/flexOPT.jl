@@ -1,6 +1,7 @@
 module flexOPT
 
     using Symbolics,UnPack,Tullio
+    using KernelAbstractions
     using ..commonBatchs
     # batch files
 
