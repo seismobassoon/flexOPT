@@ -3,11 +3,9 @@
 
 
 
-function OPTobj(operatorConfigurations::Dict)
+function OPTobj_temporarily_obsolete(operatorConfigurations::Dict)
     # this is just a wrapper for the OPTobj function below, for DrWatson package
-    @unpack famousEquationType, Δnum, orderBtime, orderBspace, WorderBtime,WorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
-
-    myEquationInside = famousEquations(famousEquationType)
+    @unpack myEquationInside, Δnum, orderBtime, orderBspace, WorderBtime,WorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
 
     TaylorOptions=(WorderBtime=WorderBtime,WorderBspace=WorderBspace,supplementaryOrder=supplementaryOrder)
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
@@ -27,7 +25,16 @@ function OPTobj(operatorConfigurations::Dict)
     return @strdict(operators)
 end
 
-function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
+function OPTobj(OPTconfig::Dict)
+    @unpack myEquationInside, Δnum, TaylorOptions, trialFunctionsCharacteristics = OPTconfig
+    Ajiννᶜs,AjiννᶜUs,Ulocals,utilities=OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment=iExperiment)
+    output = (Ajiννᶜs=Ajiννᶜs,AjiννᶜUs=AjiννᶜUs,Ulocals=Ulocals,utilities=utilities)
+    return @strdict(output)
+end
+
+
+
+function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment = 1)
 
     #region General introduction, some cautions
 
@@ -264,8 +271,6 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
     #endregion
     
 end
-
-
 
 
 function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields;threads = 256,backend=backend)
