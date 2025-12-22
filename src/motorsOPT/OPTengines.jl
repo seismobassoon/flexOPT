@@ -27,7 +27,7 @@ function OPTobj(operatorConfigurations::Dict)
     return @strdict(operators)
 end
 
-function OPTobj(myEquationInside, Δnum; coordinates=(x,y,z,t), TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
+function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment =nothing)
 
     #region General introduction, some cautions
 
@@ -188,7 +188,7 @@ function OPTobj(myEquationInside, Δnum; coordinates=(x,y,z,t), TaylorOptions=(W
             bigα[iField,iExpr]=unique(tmpNonZeroAlphas)
         end
     end
-    varM=varMmaker(pointsUsedForFields,coordinates,vars)
+    varM=varMmaker(pointsUsedForFields,coordinates,vars,∂)
     @show bigα,varM
     #endregion
 

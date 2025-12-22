@@ -44,7 +44,7 @@ function makeMixPartials(orders,coordinates;field=identity)
     return ∇
 end
 
-function varMmaker(maxPointsUsed,coordinates,vars) 
+function varMmaker(maxPointsUsed,coordinates,vars,∂) 
     # this will make an array of material coeffs for with a local Cartesian grid (max points used for a node)
     Ndimension = length(coordinates)
 
@@ -58,7 +58,7 @@ function varMmaker(maxPointsUsed,coordinates,vars)
         newstring=split(string(vars[iVar]),"(")[1]
      
         
-        CartesianDependency=findCartesianDependency(vars[iVar],Ndimension)
+        CartesianDependency=findCartesianDependency(vars[iVar],Ndimension,∂)
        
         smallVarM=Symbolics.variables(Symbol(newstring),1:length(R))
         for j in R

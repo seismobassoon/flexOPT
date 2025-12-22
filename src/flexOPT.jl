@@ -16,7 +16,8 @@ module flexOPT
     include("motorsOPT/WYYKK.jl")
     export getIntegralWYYKK
     include("motorsOPT/others.jl")
-    export findCartesianDependency, makeMixPartials,varMmaker,PDECoefFinder,timeDimensionString
+    #export findCartesianDependency, makeMixPartials,varMmaker,PDECoefFinder,timeDimensionString
+    export timeDimensionString
     include("motorsOPT/OPTEngines.jl")
     export OPTobj
     
