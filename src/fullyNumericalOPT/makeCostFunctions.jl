@@ -113,13 +113,30 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     #region unpacking, N-dimensionalising all the models 
 
     # ce dont j'ai besoin
-    semiSymbolicsOperators,modelPoints,maskedRegionInSpace
+    semiSymbolicsOperators,maskedRegionInSpace
     
     coordinates=myEquationInside.coordinates
     fields=myEquationInside.fields
     vars=myEquationInside.vars
 
     utilities=semiSymbolicCoefs["output"].utilities
+
+    @unpack middlepoint,middlepointLinear,localPointsIndices,localMaterials,localFields,timeMarching = utilities
+    timeMarching = utilities.timeMarching
+
+
+    # not like allsame = all(s -> s == size.(models)[1], size.(models))
+
+    # but I need to find the max size of all arrays of models
+
+    fakeNt = 1
+
+    if timeMarching
+        fakeNt = pointsInTime+1
+        modelPoints = (size(models[1])...,fakeNt) # Nx, Ny etc thing. Nt is also mentioned and it should be the last element!
+    else
+        modelPoints = (size(models[1]))
+    end
 
     testOnlyCentre = false
  
@@ -129,8 +146,7 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
         @error "the semi symbolic operators are not computed correctly!"
     end
 
-    @unpack middlepoint,middlepointLinear,localPointsIndices,localMaterials,localFields,timeMarching = utilities
-    timeMarching = utilities.timeMarching
+    
     # the last coordinate should be cosidered as time
 
     if !timeMarching
