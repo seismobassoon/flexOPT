@@ -33,8 +33,8 @@ function OPTobj(OPTconfig::Dict)
     Ajiννᶜs,AjiννᶜUs,Ulocals,utilities=OPTobj(myEquationInside.exprs,myEquationInside.fields,myEquationInside.vars,myEquationInside.coordinates,myEquationInside.∂,Δnum;TaylorOptions=TaylorOptions, trialFunctionsCharacteristics=trialFunctionsCharacteristics)
     
     Γjkννᶜs,ΓjkννᶜFs,Flocals= nothing,nothing,nothing
-    if myEquationInside.extrvars !== nothing
-        Γjkννᶜs,ΓjkννᶜFs,Flocals,_ = OPTobj(myEquationInside.extexprs,myEquationInside.extfields,myEquationInside.extrvars,myEquationInside.coordinates,∂,Δnum;TaylorOptions=TaylorOptions, trialFunctionsCharacteristics=trialFunctionsCharacteristics)
+    if myEquationInside.extvars !== nothing
+        Γjkννᶜs,ΓjkννᶜFs,Flocals,_ = OPTobj(myEquationInside.extexprs,myEquationInside.extfields,myEquationInside.extvars,myEquationInside.coordinates,myEquationInside.∂,Δnum;TaylorOptions=TaylorOptions, trialFunctionsCharacteristics=trialFunctionsCharacteristics)
     end
     output = (Ajiννᶜs=Ajiννᶜs,AjiννᶜUs=AjiννᶜUs,Ulocals=Ulocals,Γjkννᶜs=Γjkννᶜs,ΓjkννᶜFs=ΓjkννᶜFs,Flocals=Flocals,utilities=utilities)
     return @strdict(output)
@@ -95,6 +95,9 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
     #endregion
 
     #region initialising, unpacking etc. 
+
+
+    myEquationOneSide = (exprs=exprs,fields=fields,vars,coordinates=coordinates)
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
 
@@ -252,7 +255,7 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
         middleLinearν=centrePointConfigurations[iConfigGeometry]
         #varM is given above for the max number of points used 
         #tmpAjiννᶜU,tmpUlocal=AuSymbolic(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
-        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(myEquationOneSide,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
         Ajiννᶜs=push!(Ajiννᶜs,coefsSemiSymbolic.Ajiννᶜ)
         AjiννᶜUs=push!(AjiννᶜUs,coefsSemiSymbolic.AjiννᶜU)
         Ulocals=push!(Ulocals,coefsSemiSymbolic.Ulocal)

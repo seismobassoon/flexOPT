@@ -27,6 +27,10 @@ module flexOPT
     export timeDimensionString
     include("motorsOPT/OPTEngines.jl")
     export OPTobj
+
+    # semi-symbolics operators to fully numerical operators
+    include("fullyNumericalOPT/makeCostFunctions.jl")
+    export quasiNumericalOperatorConstruction
     
     # famous equations
     include("motorsOPT/famousEquations.jl")
