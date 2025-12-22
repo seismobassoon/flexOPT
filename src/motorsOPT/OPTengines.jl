@@ -388,9 +388,9 @@ function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,mul
     #endregion
 
     #region adapt the arrays to the GPU backend
-    tableForPoints_gpu = Adapt.adapt(backend,tableForPoints)
-    tableForLoop_gpu = Adapt.adapt(backend,tableForLoop)
-    C_gpu = Adapt.adapt(backend,Float32.(Cˡη))
+    tableForPoints_gpu = makeGPUarray(backend,tableForPoints)
+    tableForLoop_gpu = makeGPUarray(backend,tableForLoop)
+    C_gpu = makeGPUarray(backend,Float32.(Cˡη))
 
 
     # Collect the size of each array
@@ -407,11 +407,11 @@ function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,mul
         tmpRange = CartesianIndices(tmpMatrix)
         int_total_float32[iCoord,tmpRange] = tmpMatrix
     end
-    int_gpu = Adapt.adapt(backend,int_total_float32)
+    int_gpu = makeGPUarray(backend,int_total_float32)
     
 
 
-    output_gpu = Adapt.adapt(backend, zeros(Float32, nPoints, nPoints, nTotalSmallα))
+    output_gpu = makeGPUarray(backend, zeros(Float32, nPoints, nPoints, nTotalSmallα))
     
     #
 
@@ -444,7 +444,7 @@ function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,mul
     # with (n',n) depends on eachα and x=η+μ
 
     @show "GPU computation of Ajiννᶜ: done"
-    output = Adapt.adapt(CPU(), output_gpu)
+    output = makeGPUarray(CPU(),output_gpu)
     #endregion
 
 
