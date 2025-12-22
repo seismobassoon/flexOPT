@@ -7,18 +7,18 @@ function OPTobj(operatorConfigurations::Dict)
     # this is just a wrapper for the OPTobj function below, for DrWatson package
     @unpack famousEquationType, Δnum, orderBtime, orderBspace, WorderBtime,WorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
 
-    exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = famousEquations(famousEquationType)
+    myEquationInside = famousEquations(famousEquationType)
 
     TaylorOptions=(WorderBtime=WorderBtime,WorderBspace=WorderBspace,supplementaryOrder=supplementaryOrder)
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
-    @time operatorData=OPTobj(exprs,fields,vars; coordinates=coordinates,trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,Δnum = Δnum,iExperiment=iExperiment)
+    @time operatorData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)
     #AjiννᶜU=operatorData[1]
     #utilities=operatorData[2]   
 
     operatorForceData=nothing
     # if you do not want to apply external forces, it is possible to skip below
     if IneedExternalSources 
-        @time operatorForceData=OPTobj(extexprs,extfields,extvars; coordinates=coordinates,trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,Δnum = Δnum,iExperiment=iExperiment)  
+        @time operatorForceData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)  
         #@show Γg = operatorForceData[1]
         #utilitiesForce = operatorForceData[2]
     end
@@ -232,27 +232,26 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
     #region obtaining the semi-symbolic expression of cost function based on eqns. 52 and 53.
 
     # before calling AuSymbolic we can manipulate pointsIndices for various boundary configurations
-
-
-    #Δ = Δnum
-    
-
+    Ajiννᶜ=[]
     AjiννᶜU=[]
     Ulocal=[]
 
-    AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
 
-"""
+    #AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+
+
     for iConfigGeometry in eachindex(availablePointsConfigurations) 
         pointsIndices=availablePointsConfigurations[iConfigGeometry]
         middleLinearν=centrePointConfigurations[iConfigGeometry]
         #varM is given above for the max number of points used 
-        tmpAjiννᶜU,tmpUlocal=AuSymbolic(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
-        AjiννᶜU=push!(AjiννᶜU,tmpAjiννᶜU)
-        Ulocal=push!(Ulocal,tmpUlocal)
+        #tmpAjiννᶜU,tmpUlocal=AuSymbolic(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+        Ajiννᶜ=push!(Ajiννᶜ,coefsSemiSymbolic.Ajiννᶜ)
+        AjiννᶜU=push!(AjiννᶜU,coefsSemiSymbolic.AjiννᶜU)
+        Ulocal=push!(Ulocal,coefsSemiSymbolic.Ulocal)
     end
 
-"""
+
     #endregion
 
     #region outputs
@@ -499,7 +498,7 @@ function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,mul
     #endregion
 
 
-    return AjiννᶜU,Ulocal, output
+    return Ajiννᶜ=output,Ulocal=Ulocal,AjiννᶜU=AjiννᶜU
 end 
 
 

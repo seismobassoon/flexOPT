@@ -3,6 +3,10 @@ module flexOPT
     using Symbolics,UnPack,Tullio
     using KernelAbstractions
     using ..commonBatchs
+
+    # GPU backend (batchFiles/batchGPU.jl should be called in Main)
+    backend = Main.backend
+
     # batch files
 
     include("batchFiles/batchSymbolics.jl")
@@ -15,6 +19,8 @@ module flexOPT
     # Semi symbolic OPT motors
     include("motorsOPT/WYYKK.jl")
     export getIntegralWYYKK
+    include("motorsOPT/IntegrateBsplineAndPolynomials.jl")
+    export BsplineTimesPolynomialsIntegrated
     include("motorsOPT/others.jl")
     #export findCartesianDependency, makeMixPartials,varMmaker,PDECoefFinder,timeDimensionString
     export timeDimensionString
