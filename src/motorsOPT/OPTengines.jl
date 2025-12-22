@@ -25,16 +25,17 @@ function OPTobj_temporarily_obsolete(operatorConfigurations::Dict)
     return @strdict(operators)
 end
 
+
+
 function OPTobj(OPTconfig::Dict)
     @unpack myEquationInside, Δnum, TaylorOptions, trialFunctionsCharacteristics = OPTconfig
-    Ajiννᶜs,AjiννᶜUs,Ulocals,utilities=OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment=iExperiment)
+    Ajiννᶜs,AjiννᶜUs,Ulocals,utilities=OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
     output = (Ajiννᶜs=Ajiννᶜs,AjiννᶜUs=AjiννᶜUs,Ulocals=Ulocals,utilities=utilities)
     return @strdict(output)
 end
 
 
-
-function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2),iExperiment = 1)
+function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
 
     #region General introduction, some cautions
 
@@ -255,7 +256,7 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
         coefsSemiSymbolic=AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
         Ajiννᶜs=push!(Ajiννᶜs,coefsSemiSymbolic.Ajiννᶜ)
         AjiννᶜUs=push!(AjiννᶜUs,coefsSemiSymbolic.AjiννᶜU)
-        Ulocals=push!(Ulocal,coefsSemiSymbolic.Ulocal)
+        Ulocals=push!(Ulocals,coefsSemiSymbolic.Ulocal)
     end
 
 
@@ -263,7 +264,7 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
 
     #region outputs
     
-    utilities=(middlepoint=middleν,middlepointLinear=centrePointConfigurations[1],localPointsIndices=multiPointsIndices,localMaterials=varM,localFields=Ulocal[1])
+    utilities=(middlepoint=middleν,middlepointLinear=centrePointConfigurations[1],localPointsIndices=multiPointsIndices,localMaterials=varM,localFields=Ulocals[1],timeMarching=timeMarching)
    
     return Ajiννᶜs,AjiννᶜUs,Ulocals,utilities
     
