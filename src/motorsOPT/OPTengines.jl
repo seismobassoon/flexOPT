@@ -29,13 +29,19 @@ end
 
 function OPTobj(OPTconfig::Dict)
     @unpack myEquationInside, Δnum, TaylorOptions, trialFunctionsCharacteristics = OPTconfig
-    Ajiννᶜs,AjiννᶜUs,Ulocals,utilities=OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
-    output = (Ajiννᶜs=Ajiννᶜs,AjiννᶜUs=AjiννᶜUs,Ulocals=Ulocals,utilities=utilities)
+
+    Ajiννᶜs,AjiννᶜUs,Ulocals,utilities=OPTobj(myEquationInside.exprs,myEquationInside.fields,myEquationInside.vars,myEquationInside.coordinates,myEquationInside.∂,Δnum;TaylorOptions=TaylorOptions, trialFunctionsCharacteristics=trialFunctionsCharacteristics)
+    
+    Γjkννᶜs,ΓjkννᶜFs,Flocals= nothing,nothing,nothing
+    if myEquationInside.extrvars !== nothing
+        Γjkννᶜs,ΓjkννᶜFs,Flocals,_ = OPTobj(myEquationInside.extexprs,myEquationInside.extfields,myEquationInside.extrvars,myEquationInside.coordinates,∂,Δnum;TaylorOptions=TaylorOptions, trialFunctionsCharacteristics=trialFunctionsCharacteristics)
+    end
+    output = (Ajiννᶜs=Ajiννᶜs,AjiννᶜUs=AjiννᶜUs,Ulocals=Ulocals,Γjkννᶜs=Γjkννᶜs,ΓjkννᶜFs=ΓjkννᶜFs,Flocals=Flocals,utilities=utilities)
     return @strdict(output)
 end
 
 
-function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
+function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
 
     #region General introduction, some cautions
 
@@ -89,13 +95,6 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
     #endregion
 
     #region initialising, unpacking etc. 
-
-    exprs=myEquationInside.exprs
-    fields=myEquationInside.fields
-    vars=myEquationInside.vars
-    coordinates=myEquationInside.coordinates
-    ∂=myEquationInside.∂
-    ∂²=myEquationInside.∂²
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
 
