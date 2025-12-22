@@ -232,9 +232,9 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
     #region obtaining the semi-symbolic expression of cost function based on eqns. 52 and 53.
 
     # before calling AuSymbolic we can manipulate pointsIndices for various boundary configurations
-    Ajiννᶜ=[]
-    AjiννᶜU=[]
-    Ulocal=[]
+    Ajiννᶜs=[]
+    AjiννᶜUs=[]
+    Ulocals=[]
 
 
     #AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
@@ -245,10 +245,10 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
         middleLinearν=centrePointConfigurations[iConfigGeometry]
         #varM is given above for the max number of points used 
         #tmpAjiννᶜU,tmpUlocal=AuSymbolic(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
-        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
-        Ajiννᶜ=push!(Ajiννᶜ,coefsSemiSymbolic.Ajiννᶜ)
-        AjiννᶜU=push!(AjiννᶜU,coefsSemiSymbolic.AjiννᶜU)
-        Ulocal=push!(Ulocal,coefsSemiSymbolic.Ulocal)
+        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+        Ajiννᶜs=push!(Ajiννᶜs,coefsSemiSymbolic.Ajiννᶜ)
+        AjiννᶜUs=push!(AjiννᶜUs,coefsSemiSymbolic.AjiννᶜU)
+        Ulocals=push!(Ulocal,coefsSemiSymbolic.Ulocal)
     end
 
 
@@ -258,7 +258,7 @@ function OPTobj(myEquationInside, Δnum;TaylorOptions=(WorderBtime=1,WorderBspac
     
     utilities=(middlepoint=middleν,middlepointLinear=centrePointConfigurations[1],localPointsIndices=multiPointsIndices,localMaterials=varM,localFields=Ulocal[1])
    
-    return AjiννᶜU,utilities
+    return Ajiννᶜs,AjiννᶜUs,Ulocals,utilities
     
 
     #endregion
@@ -268,11 +268,14 @@ end
 
 
 
-function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields;threads = 256,backend=backend)
+function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields;threads = 256,backend=backend)
 
     #region preparation
 
-    
+    exprs=myEquationInside.exprs
+    fields=myEquationInside.fields
+    vars=myEquationInside.vars
+    coordinates=myEquationInside.coordinates
 
     # this is fully GPU optimised version of ASymbolic 
     nCoordinates = length(coordinates)
@@ -447,7 +450,6 @@ function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,mul
     output = makeGPUarray(CPU(),output_gpu)
     #endregion
 
-
     #region contruct Ulocal
 
     # the order is: (νᶜ,) ν, i, j  here
@@ -497,8 +499,8 @@ function AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,mul
 
     #endregion
 
-
-    return Ajiννᶜ=output,Ulocal=Ulocal,AjiννᶜU=AjiννᶜU
+    coefs=(Ajiννᶜ=output,Ulocal=Ulocal,AjiννᶜU=AjiννᶜU)
+    return coefs
 end 
 
 

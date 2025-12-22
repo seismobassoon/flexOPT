@@ -54,14 +54,18 @@ end
     result[i] = temp
 end
 
-function makeGPUarray(backend,A)
-    A_gpu= Adapt.adapt(backend, Float32.(A))
-    return A_gpu
+function makeGPUarray(backend, A)
+    T = eltype(A)
+
+    if T <: Integer
+        return Adapt.adapt(backend, Int32.(A))
+    elseif T <: AbstractFloat
+        return Adapt.adapt(backend, Float32.(A))
+    else
+        error("makeGPUarray: unsupported element type $(T)")
+    end
 end
-function recoverCPUarray(A_gpu)
-    A_cpu = Array(A_gpu)         # preserves shape
-    return Float64.(A_cpu)       # convert elements
-end
+
 
 function GPUsum(gpuArray)
     return KernelAbstractions.sum(gpuArray)

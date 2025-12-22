@@ -6,6 +6,7 @@ module flexOPT
 
     # GPU backend (batchFiles/batchGPU.jl should be called in Main)
     backend = Main.backend
+    makeGPUarray = Main.makeGPUarray
 
     # batch files
 
