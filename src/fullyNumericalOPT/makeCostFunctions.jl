@@ -54,14 +54,14 @@ function constructingNumericalDiscretisedEquations(config::Dict)
     # just a wrapper
     @unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
 
-    costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicOpt,coordinates,models,fields,vars,modelPoints,utilities, maskedRegion;initialCondition=0.0)
+    costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models;initialCondition=0.0)
     numOperators=(costfunctions=costfunctions,場=場,champsLimité=champsLimité)
 
     #@show costfunctions
     return @strdict(numOperators)
 end
 
-function constructingNumericalDiscretisedEquations(semiSymbolicsOperators,coordinates,models,fields,vars,modelPoints,utilities,maskedRegionInSpace;absorbingBoundaries=nothing,initialCondition=0.0)
+function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models;absorbingBoundaries=nothing,initialCondition=0.0)
 
     #region todo list
     #todo list
@@ -112,6 +112,15 @@ function constructingNumericalDiscretisedEquations(semiSymbolicsOperators,coordi
 
     #region unpacking, N-dimensionalising all the models 
 
+    # ce dont j'ai besoin
+    semiSymbolicsOperators,modelPoints,maskedRegionInSpace
+    
+    coordinates=myEquationInside.coordinates
+    fields=myEquationInside.fields
+    vars=myEquationInside.vars
+
+    utilities=semiSymbolicCoefs["output"].utilities
+
     testOnlyCentre = false
  
     if size(semiSymbolicsOperators)[1] === 1
@@ -120,10 +129,8 @@ function constructingNumericalDiscretisedEquations(semiSymbolicsOperators,coordi
         @error "the semi symbolic operators are not computed correctly!"
     end
 
-    timeMarching = any(a -> a === timeDimensionString, string.(coordinates)) # important to know if we need to construct a time marching scheme
-
-    @unpack middlepoint,middlepointLinear,localPointsIndices,localMaterials,localFields = utilities
-
+    @unpack middlepoint,middlepointLinear,localPointsIndices,localMaterials,localFields,timeMarching = utilities
+    timeMarching = utilities.timeMarching
     # the last coordinate should be cosidered as time
 
     if !timeMarching
