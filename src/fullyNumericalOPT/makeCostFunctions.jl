@@ -50,10 +50,23 @@ function quasiNumericalOperatorConstruction(operators,modelName,models,forceMode
     return costfunctions,fieldLHS,fieldRHS,champsLimité
 end
 
+
+function getModelPoints(models,pointsInTime,timeMarching)
+    
+    fakeNt = 1
+    if timeMarching
+        fakeNt = pointsInTime+1
+        modelPoints = (size(models)...,fakeNt) # Nx, Ny etc thing. Nt is also mentioned and it should be the last element!
+    else
+        modelPoints = (size(models)...,1)
+    end
+    return modelPoints 
+end
+
 function constructingNumericalDiscretisedEquations(config::Dict)
     # just a wrapper
     @unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
-
+   
     costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models;initialCondition=0.0)
     numOperators=(costfunctions=costfunctions,場=場,champsLimité=champsLimité)
 
@@ -61,7 +74,11 @@ function constructingNumericalDiscretisedEquations(config::Dict)
     return @strdict(numOperators)
 end
 
-function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models;absorbingBoundaries=nothing,initialCondition=0.0)
+function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints;absorbingBoundaries=nothing,initialCondition=0.0)
+
+    # if modelPoints = nothing -> models[1] will be the reference for the modelPoints (in space)
+    # if timeMarching modelPoints will get an additional dimension (>1)
+    # if !timeMarching modelPoints will get an additional dimension (=1)
 
     #region todo list
     #todo list
@@ -115,6 +132,19 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     # ce dont j'ai besoin
     semiSymbolicsOperators,maskedRegionInSpace
     
+    # not yet resolved:
+
+
+    testOnlyCentre = false
+ 
+    if size(semiSymbolicsOperators)[1] === 1
+        testOnlyCentre = true
+    elseif ndims(semiSymbolicsOperators) !==2
+        @error "the semi symbolic operators are not computed correctly!"
+    end
+
+
+
     coordinates=myEquationInside.coordinates
     fields=myEquationInside.fields
     vars=myEquationInside.vars
@@ -127,26 +157,7 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
 
     # not like allsame = all(s -> s == size.(models)[1], size.(models))
 
-    # but I need to find the max size of all arrays of models
-
-    fakeNt = 1
-
-    if timeMarching
-        fakeNt = pointsInTime+1
-        modelPoints = (size(models[1])...,fakeNt) # Nx, Ny etc thing. Nt is also mentioned and it should be the last element!
-    else
-        modelPoints = (size(models[1]))
-    end
-
-    testOnlyCentre = false
- 
-    if size(semiSymbolicsOperators)[1] === 1
-        testOnlyCentre = true
-    elseif ndims(semiSymbolicsOperators) !==2
-        @error "the semi symbolic operators are not computed correctly!"
-    end
-
-    
+   
     # the last coordinate should be cosidered as time
 
     if !timeMarching
@@ -154,7 +165,7 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
         middlepoint=CartesianIndex([car2vec(middlepoint);1]...)
         tmpT=Symbolics.variable(timeDimensionString)
         coordinates = (coordinates...,tmpT)
-        modelPoints = (modelPoints...,1)
+        #modelPoints = (modelPoints...,1)
         tmp_del = Symbolics.variable("∂"*timeDimensionString)
         tmp_del = Differential(tmpT)
         ∂ .= push!(∂,tmp_del)

@@ -30,7 +30,7 @@ module flexOPT
 
     # semi-symbolics operators to fully numerical operators
     include("fullyNumericalOPT/makeCostFunctions.jl")
-    export quasiNumericalOperatorConstruction
+    export getModelPoints,quasiNumericalOperatorConstruction
     
     # famous equations
     include("motorsOPT/famousEquations.jl")
