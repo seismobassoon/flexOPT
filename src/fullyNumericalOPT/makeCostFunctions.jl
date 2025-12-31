@@ -65,16 +65,17 @@ end
 
 function constructingNumericalDiscretisedEquations(config::Dict)
     # just a wrapper
-    @unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
+    #@unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
    
-    costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models;initialCondition=0.0)
+    @unpack semiSymbolicCoefs, models, modelName, modelPoints, maskedRegion = config
+    costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;initialCondition=0.0)
     numOperators=(costfunctions=costfunctions,場=場,champsLimité=champsLimité)
 
     #@show costfunctions
     return @strdict(numOperators)
 end
 
-function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints;absorbingBoundaries=nothing,initialCondition=0.0)
+function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
 
     # if modelPoints = nothing -> models[1] will be the reference for the modelPoints (in space)
     # if timeMarching modelPoints will get an additional dimension (>1)
@@ -130,10 +131,8 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     #region unpacking, N-dimensionalising all the models 
 
     # ce dont j'ai besoin
-    semiSymbolicsOperators,maskedRegionInSpace
+    semiSymbolicsOperators=semiSymbolicCoefs["output"].AjiννᶜUs
     
-    # not yet resolved:
-
 
     testOnlyCentre = false
  
