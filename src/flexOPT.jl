@@ -29,8 +29,9 @@ module flexOPT
     export OPTobj
 
     # semi-symbolics operators to fully numerical operators
-    include("fullyNumericalOPT/makeCostFunctions.jl")
-    export getModelPoints,quasiNumericalOperatorConstruction
+    #include("fullyNumericalOPT/makeCostFunctions.jl")
+    include("fullyNumericalOPT/costFunctions.jl")
+    export getModelPoints,quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
     
     # famous equations
     include("motorsOPT/famousEquations.jl")
