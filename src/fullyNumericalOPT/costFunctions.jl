@@ -31,7 +31,7 @@ end
 
 
 
-function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
+function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,CerjanGridPoints=50,initialCondition=0.0)
 
     #region todo list
     #todo list
