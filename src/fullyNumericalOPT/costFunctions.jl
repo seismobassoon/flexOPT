@@ -33,10 +33,6 @@ end
 
 function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
 
-    # if modelPoints = nothing -> models[1] will be the reference for the modelPoints (in space)
-    # if timeMarching modelPoints will get an additional dimension (>1)
-    # if !timeMarching modelPoints will get an additional dimension (=1)
-
     #region todo list
     #todo list
     # 
@@ -86,19 +82,10 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
 
     #region unpacking, N-dimensionalising all the models 
 
-    # ce dont j'ai besoin
-    semiSymbolicsOperators=semiSymbolicCoefs["output"].AjiννᶜUs
     
-
-    testOnlyCentre = false
- 
-    if size(semiSymbolicsOperators)[1] === 1
-        testOnlyCentre = true
-    elseif ndims(semiSymbolicsOperators) !==2
-        @error "the semi symbolic operators are not computed correctly!"
-    end
-
-
+    semiSymbolicsOperators=semiSymbolicCoefs["output"].AjiννᶜUs
+    Ulocals=semiSymbolicCoefs["output"].Ulocals
+    
 
     coordinates=myEquationInside.coordinates
     fields=myEquationInside.fields
@@ -106,8 +93,12 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
 
     utilities=semiSymbolicCoefs["output"].utilities
 
-    @unpack middlepoint,middlepointLinear,localPointsIndices,localMaterials,localFields,timeMarching = utilities
-    timeMarching = utilities.timeMarching
+    availablePointsConfigurations=utilities.availablePointsConfigurations
+    centrePointConfigurations=utilities.centrePointConfigurations
+
+
+    @unpack availablePointsConfigurations,centrePointConfigurations,localPointsIndices,localMaterials,timeMarching = utilities
+    #timeMarching = utilities.timeMarching
 
 
     # not like allsame = all(s -> s == size.(models)[1], size.(models))

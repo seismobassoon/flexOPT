@@ -266,7 +266,7 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
 
     #region outputs
     
-    utilities=(middlepoint=middleν,middlepointLinear=centrePointConfigurations[1],localPointsIndices=multiPointsIndices,localMaterials=varM,localFields=Ulocals[1],timeMarching=timeMarching)
+    utilities=(availablePointsConfigurations=availablePointsConfigurations,centrePointConfigurations=centrePointConfigurations,localPointsIndices=multiPointsIndices,localMaterials=varM,timeMarching=timeMarching)
    
     return Ajiννᶜs,AjiννᶜUs,Ulocals,utilities
     
@@ -280,7 +280,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
 
     #region preparation
 
-    exprs=myEquationInside.exprs
+    #exprs=myEquationInside.exprs
     fields=myEquationInside.fields
     vars=myEquationInside.vars
     coordinates=myEquationInside.coordinates
@@ -291,7 +291,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     nLs = length(multiOrdersIndices)
     # normally we put only the centre points (in the present time)
     # but the boundary condition requires some points a bit more challenging
-    νIndices=[pointsIndices[middleLinearν]]
+    # νIndices=[pointsIndices[middleLinearν]]
     # νIndices can be pointsIndices if one needs to look for
     # boundary operators
 
