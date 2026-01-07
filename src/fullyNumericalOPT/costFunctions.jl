@@ -80,7 +80,7 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     #
     #endregion
 
-    #region unpacking, N-dimensionalising all the models 
+    #region unpacking, N-dimensionalising all the models (if not timemarching, we add a dummy dimension 't' at the end)
 
     
     semiSymbolicsOperators=semiSymbolicCoefs["output"].AjiννᶜUs
@@ -171,7 +171,7 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
 
     #endregion
 
-    #region construction of the fields
+    #region construction of the fields, wholeRegionPoints with absorbingBoundaries (need to check if this works)
 
     wholeRegionPoints = nothing
 
