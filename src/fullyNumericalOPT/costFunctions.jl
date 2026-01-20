@@ -19,6 +19,7 @@ function constructingNumericalDiscretisedEquations(config::Dict)
     #@unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
    
     @unpack semiSymbolicCoefs, models, modelName, modelPoints, myEquationInside, maskedRegion = config
+    @show config
     costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;initialCondition=0.0)
     numOperators=(costfunctions=costfunctions,場=場,champsLimité=champsLimité)
 
@@ -330,7 +331,7 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     # here the number of test functions should not be necessarily the number of points but I will work later
 
     costFunctions=Array{Any,2}(undef,NtypeofExpr,NtestfunctionsInSpace)
-
+    @show size(costFunctions)
     #@show semiSymbolicsOperators
     #@show localMaterials[1,15],localFields,size(localFields)
     #@show Models[1][10,15,1]

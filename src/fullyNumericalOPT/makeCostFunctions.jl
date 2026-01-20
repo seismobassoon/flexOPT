@@ -68,6 +68,9 @@ function constructingNumericalDiscretisedEquations(config::Dict)
     #@unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
    
     @unpack semiSymbolicCoefs, models, modelName, modelPoints, myEquationInside, maskedRegion = config
+    @show config
+
+    return
     costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;initialCondition=0.0)
     numOperators=(costfunctions=costfunctions,場=場,champsLimité=champsLimité)
 
@@ -257,10 +260,10 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     # some useful stuff
 
 
-    spacePointsUsed=car2vec(localPointsIndices[end])[1:end-1]
+    @show spacePointsUsed=car2vec(localPointsIndices[end])[1:end-1]
     timePointsUsedForOneStep=car2vec(localPointsIndices[end])[end]
     wholeRegionPointsSpace=wholeRegionPoints[1:end-1]
-   
+    return costFunctions,場,champsLimité
  
     # we need to put the left and right regions in order that centre ν configuration can pass
 
