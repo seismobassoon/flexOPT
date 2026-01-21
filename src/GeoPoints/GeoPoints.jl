@@ -7,6 +7,9 @@ function planet_ellipsoid(name::Symbol)
     if name == :Earth # WGS84
         a= 6378137.0
         f =1.0/298.257223563
+    elseif name == :SphericalEarth
+        a = 6371000.0
+        f = 0.0
     elseif name == :Mars
         a = 3396200.0
         f = 1 / 169.8

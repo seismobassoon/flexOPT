@@ -38,6 +38,100 @@ function initiateSeismicModel(newArray::Array)
 end
 
 
+function getParamsWithoutTopo(allGridsInGeoPoints,effectiveRadii;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
+
+    
+    #@enum Couche Graine Noyau Manteau Océane Atmosphère Ionosphère Dehors
+
+    #pointCharacter = Array{Couche}(undef,size(allGridsInGeoPoints)...)
+
+
+    # some 'chelou' parameters that I need to control
+
+    #NradiusNodes =500 # I don't know how to make this number reasonable for interpolation
+    #eps = 10.0 # in metre "below" option should be enough but who knows
+    #VpWater = 1500.0 # m/s
+    #ρWater = 1000.0 # kg/m3
+    #VpAir = 314.0
+    #ρAir = 1.0
+
+
+
+    precision = GMTprecision(precisionInKm)  # this should be in Km
+
+
+    #seismicModel=(ρ=zeros(Float64,size(allGridsInGeoPoints)...),Vpv=zeros(Float64,size(allGridsInGeoPoints)...),Vph=zeros(Float64,size(allGridsInGeoPoints)...),Vsv=zeros(Float64,size(allGridsInGeoPoints)...),Vsh=zeros(Float64,size(allGridsInGeoPoints)...),Qμ=zeros(Float64,size(allGridsInGeoPoints)...),Qκ=zeros(Float64,size(allGridsInGeoPoints)...),QμPower=zeros(Float64,size(allGridsInGeoPoints)...),QκPower=zeros(Float64,size(allGridsInGeoPoints)...),η=zeros(Float64,size(allGridsInGeoPoints)...))
+
+
+    seismicModel = initiateSeismicModel(allGridsInGeoPoints)
+
+    # get the extremeties in radius
+
+    
+    tmpNradiusNodes = NradiusNodes
+    if NradiusNodes === 1
+        tmpNradiusNodes = 1
+    end
+
+    ΔradiusIncrementInKm = (maximum(effectiveRadii)-minimum(effectiveRadii))/(tmpNradiusNodes-1) *1.e-3
+    linearRadiiInKm =(collect(1:1:NradiusNodes) .- 1)*ΔradiusIncrementInKm .+ minimum(effectiveRadii)*1.e-3
+
+    push!(linearRadiiInKm, planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer) 
+    newRadii,params=planet1D.compute1DseismicParamtersFromPolynomialCoefficientsWithGivenRadiiArray(planet1D.my1DDSMmodel,linearRadiiInKm,"below")
+
+
+    # get the extremeties in lat and lon
+
+    lats = [p.lat for p in allGridsInGeoPoints]
+    lons = [p.lon for p in allGridsInGeoPoints]
+
+
+    
+
+    for i in CartesianIndices(allGridsInGeoPoints)
+        tmpPoint = allGridsInGeoPoints[i]
+        if 0.0 < tmpPoint.alt <= topoInterpolater(tmpPoint.lon,tmpPoint.lat) 
+            # it might be very time-consuming if we do this for 3D Cartesian points ...
+            effectiveRadii[i]=planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
+     
+        end
+
+
+        # NF needs to give topography file
+
+        if hasAirModel === false
+            if topoInterpolater(tmpPoint.lon,tmpPoint.lat) <tmpPoint.alt
+                seismicModel.ρ[i]=ρAir
+                seismicModel.Vpv[i]=VpAir
+                seismicModel.Vph[i]=VpAir
+                seismicModel.Vsv[i]=0.0
+                seismicModel.Vsh[i]=0.0
+            end
+        end
+
+    end
+
+    seismicModel = interpolate_params(params, newRadii, effectiveRadii)
+
+     for i in CartesianIndices(allGridsInGeoPoints)
+        tmpPoint = allGridsInGeoPoints[i]
+        # water column correction
+        if topoInterpolater(tmpPoint.lon,tmpPoint.lat)<=tmpPoint.alt <= 0.0
+
+            seismicModel.ρ[i]=ρWater
+            seismicModel.Vpv[i]=VpWater
+            seismicModel.Vph[i]=VpWater
+            seismicModel.Vsv[i]=0.0
+            seismicModel.Vsh[i]=0.0
+
+        end
+    end
+
+
+    return seismicModel
+
+end
+
 
 function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Float64;NradiusNodes=500,eps=10.0,VpWater=1.5,ρWater=1.0,VpAir=0.314,ρAir=0.001,hasAirModel=false)
 
