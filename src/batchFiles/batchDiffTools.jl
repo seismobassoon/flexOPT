@@ -1,7 +1,7 @@
 using SparseArrays,Symbolics #SparseDiffTools
 
-include("../src/batchUseful.jl")
-include("../src/batchEnzyme.jl")
+#include("../src/batchUseful.jl")
+#include("../src/batchEnzyme.jl")
 
 function buildNumericalFunctions(costfunctions, symbUnknownField, symbKnownField, symbKnownForce)
     # Collect all known inputs (constants) and unknown inputs (variables)

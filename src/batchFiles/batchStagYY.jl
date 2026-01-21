@@ -495,6 +495,200 @@ end
 
 
 
+
+function readStagYYFilesAverage(file)
+    magic, inputILEN, byte_reverse_in, io=read_magic(file)
+    magic,nval = evaluate_nval_from_magicNumber(magic)
+    intDataType,floatDataType,dx,dy,nx,ny,nz,nb,nnx,nny,nnz,nnb,rcmb,iStep,time,zc,boolSpherical=read_header(io,inputILEN,magic)
+   
+    nodes=nothing
+    boolFlat = true
+
+    Xnode=[]
+    Ynode=[]    
+    Znode=[]
+
+
+   
+    if nx == 1
+       boolFlat = true
+    end
+ 
+
+
+    if boolSpherical
+        # these are the grid points including the boundaries
+        r = rcmb .+ zc[1,1:nz+1]
+        
+        theta = (collect(1:1:nx+1) .- (nx+1)) .* dx .+ 0.5*π
+        phi = (collect(1:1:ny+1) .- (ny+1)) .* dy
+        
+
+        # these are the midpoints 
+        r_mid = rcmb .+ zc[2,1:nz]
+        theta_mid = (collect(1:1:nx) .- (nx+1)) .* dx .+ 0.5*π .+ 0.5*dx
+        phi_mid = phi = (collect(1:1:ny) .- (ny+1)) .* dy .+ 0.5*dy
+        
+        # interpolation should be done with the midpoints + end points
+
+        r_new = prepend!(r_mid,r[1])
+        r_new = push!(r_mid,r[end])
+        minR = r[1]
+        maxR = r[end]
+        rC=r_new
+
+        theta_new = prepend!(theta_mid,theta[1])
+        theta_new = push!(theta_new,theta[end])
+        minθ = theta[1]
+        maxθ = theta[end]
+        phi_new = prepend!(phi_mid,phi[1])
+        phi_new = push!(phi_new,phi[end])
+        minϕ = phi[1]
+        maxϕ = phi[end]
+        if boolFlat
+            minθ = 0.
+            maxθ = 0.
+            theta_new = (π/2)  # if flat, we are looking at the 
+            nodes=(theta_new,phi_new,r_new)
+        else   
+            nodes=(theta_new,phi_new,r_new)
+        end
+
+    
+    else
+        # do not know if this works (certainly not! try to mimic the code above for the spherical case)
+        x=collect(1:1:nx+1) .* dx
+        y=collect(1:1:ny+1) .* dy
+        z=zc
+        nodes=(x,y,z)
+    end
+
+    
+
+    theta_new_piCoef = theta_new ./ π
+    phi_new_piCoef = phi_new ./ π
+
+    if boolSpherical
+        for rTemp in r_new
+            for phiTemp in phi_new_piCoef
+                cosPhiPi = cospi(phiTemp)
+                sinPhiPi = sinpi(phiTemp)
+               
+                for thetaTemp in theta_new_piCoef
+                    cosThetaPi = cospi(thetaTemp)
+                    sinThetaPi = sinpi(thetaTemp) 
+                    Xnode = push!(Xnode,rTemp*sinThetaPi*cosPhiPi)
+                    Ynode = push!(Ynode,rTemp*sinThetaPi*sinPhiPi)
+                    Znode = push!(Znode,rTemp*cosThetaPi)
+
+                end
+            end
+        end
+    else
+        @error "cartesian format: not yet developed"
+    end
+
+    
+
+
+   #coord[1,ix,iy,iz] = r[iz]*sin(theta)*cos(phi)
+   #coord[2,ix,iy,iz] = r[iz]*sin(theta)*sin(phi)
+   #coord[3,ix,iy,iz] = r[iz]*cos(theta)
+   
+   
+   
+
+   #field = binRead(io,floatDataType,(nx)*(ny)*(nz))
+   #field = binRead(io,Float64,nx*ny*nz)
+   #rawField =field
+   #newField = nothing
+
+   rawField = readField(io,floatDataType,nval,nx,ny,nz,nb,nnx,nny,nnz,nnb)
+
+   
+    if boolFlat
+        #field=reshape(field, (ny,nz)) 
+
+        field = zeros(floatDataType,ny,nz)
+        field[1:ny,1:nz]=rawField[1,1,1:ny,1:nz,1]
+
+
+        newField = zeros(floatDataType,ny+2,nz+2)
+
+        # the interior
+
+        newField[2:ny+1,2:nz+1] = field[1:end,1:end]
+
+        # 4 'surfaces'
+
+        newField[1,2:nz+1] = field[1,1:nz]
+        newField[end,2:nz+1] = field[end,1:nz]
+        newField[2:ny+1,1] = field[1:ny,1]
+        newField[2:ny+1,end] = field[1:ny,end]
+
+        # 4 'endpoints'
+
+        newField[1,1,1]=field[1,1,1]
+        newField[1,end,1]=field[1,end,1]
+        newField[1,1,end]=field[1,1,end]
+        newField[1,end,end]=field[1,end,end]
+
+
+    else
+        #field=reshape(field, (nx,ny,nz)) 
+        field = zeros(floatDataType,nx,ny,nz)
+        field[1:ny,1:nz]=rawField[1,1:nx,1:ny,1:nz,1]
+
+        newField = zeros(floatDataType,nx+2,ny+2,nz+2)
+
+        # the interior
+
+        newField[2:nx+1,2:ny+1,2:nz+1] = field[1:nx,1:ny,1:nz]
+
+        # 6 'surfaces'
+        
+        newField[1,2:ny+1,2:nz+1] = field[1,1:ny,1:nz]
+        newField[end,2:ny+1,2:nz+1] = field[end,1:ny,1:nz]
+        newField[2:nx+1,1,2:nz+1] = field[1:nx,1,1:nz]
+        newField[2:nx+1,end,2:nz+1] = field[1:nx,end,1:nz]
+        newField[2:nx+1,2:ny+1,1] = field[1:nx,1:ny,1]
+        newField[2:nx+1,2:ny+1,end] = field[1:nx,1:ny,end]
+
+        # 8 'endpoints'
+        newField[1,1,1]=field[1,1,1]
+        newField[end,1,1]=field[end,1,1]
+        newField[1,end,1]=field[1,end,1]
+        newField[end,end,1]=field[end,end,1]
+        newField[1,1,end]=field[1,1,end]
+        newField[end,1,end]=field[end,1,end]
+        newField[1,end,end]=field[1,end,end]
+        newField[end,end,end]=field[end,end,end]
+
+    end
+
+    if boolFlat
+        avNewField = similar(newField)
+        diffNewField = similar(newField)
+        for iz in 1:nz+2
+            average = sum(newField[:,iz])
+            average /= Float64(ny+2)
+            avNewField[:,iz] .= average
+        end
+        #@show size(avNewField)
+        diffNewField = newField .- avNewField
+        newField=reshape(newField,(ny+2)*(nz+2))
+        avNewField=reshape(avNewField,(ny+2)*(nz+2))
+        diffNewField=reshape(diffNewField,(ny+2)*(nz+2))
+        return newField, avNewField, diffNewField, Xnode, Ynode, rcmb
+    else
+        newField=reshape(newField,(nx+2)*(ny+2)*(nz+2))
+        return newField, Xnode, Ynode, Znode, rcmb
+    end
+   #fieldInterpolated=interpolate(nodes,newField,Gridded(Linear()))
+
+end
+
+
 function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iCheckCoreModel=true)
     # local function here: this requires planet1D.jl, testparam.csv
     #

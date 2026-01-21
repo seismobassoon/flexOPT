@@ -6,7 +6,7 @@ module commonBatchs
     include("batchFiles/batchDrWatson.jl")
     include("batchFiles/batchImages.jl")
     include("batchFiles/batchUseful.jl")
-
+    include("batchFiles/batchStagYY.jl")
 
     export myProduceOrLoad,lazyProduceOrLoad, @strdict
     export getColorPalette, regenerataionColorMap, color2Float
@@ -15,5 +15,8 @@ module commonBatchs
     export car2vec,carDropDim,carAddDim,vec2car
     export flatten,deep_flatten,is_all_less_than_or_equal,distance2_point_to_box
     export myInv
+    # batchStagYY
+    export myListDir,readStagYYFiles,readStagYYFilesAverage
+    export quarterDiskExtrapolationRawGrid!, quarterDiskExtrapolation
 
 end

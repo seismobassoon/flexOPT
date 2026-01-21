@@ -23,9 +23,9 @@ module Neurthino
     const N_A = 6.022e23 #[mol^-1]
     const G_F = 8.961877245622253e-38 #[eV*cm^3]
 
-    # Julia 1.0 compatibility
-    isnothing(::Any) = false
-    isnothing(::Nothing) = true
+    # Julia 1.0 compatibility - normally obsolete
+    #isnothing(::Any) = false
+    #isnothing(::Nothing) = true
 
     #specific sources
 
@@ -38,9 +38,11 @@ module Neurthino
     include("Neurthino/NeurthinoRelated.jl")
 
 
-    #batch files
-    include("batchFiles/batchDiffTools.jl")
-    include("batchFiles/batchStagYY.jl")
+    
+    export N_A, G_F
+    export oscprob
+
+
 
 
 end # module
