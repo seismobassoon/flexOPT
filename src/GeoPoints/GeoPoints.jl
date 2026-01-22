@@ -256,7 +256,7 @@ p_local_to_ECEF(x_3D,y_3D,z_3D,pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float6
 p_local_to_ECEF(vec3D::SVector{3,Float64},pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) = pOrigin+R*SVector(vec3D[1],vec3D[2],vec3D[3])
 
 
-function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,altMax::Float64,leftLimit::Float64, rightLimit::Float64; p1::GeoPoint=GeoPoint(0.0,-1.0),p2::GeoPoint=GeoPoint(0.0,1,0))
+function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,altMax::Float64,leftLimit::Float64, rightLimit::Float64; p1::GeoPoint=GeoPoint(0.0,-1.0),p2::GeoPoint=GeoPoint(0.0,1,0),centreOption=centreOption)
     # this function builds very differently the local box with respect to the following constructLocalBox functions
     # most of the time the user will not care the p1 and p2 when talking about the very local Cartesian coordinates so the treatment is not propre for the moment
     # 2D
@@ -264,7 +264,7 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,al
     奥行きMin=0.0 # y axis range
     奥行きMax=1.0
     arrayModel3D = zeros(typeof(arrayModel[1]),size(arrayModel)[1],1,size(arrayModel)[2])
-    output=constructLocalBox(arrayModel3D,altMin,altMax,leftLimit, rightLimit,奥行きMin,奥行きMax; p1,p2)
+    output=constructLocalBox(arrayModel3D,altMin,altMax,leftLimit, rightLimit,奥行きMin,奥行きMax; p1,p2,centreOption=centreOption)
     allGridsInGeoPoints = output.allGridsInGeoPoints[:,1,:]
     allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
     effectiveRadii = output.effectiveRadii[:,1,:]
@@ -272,7 +272,7 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,al
             Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz)
 end
 
-function constructLocalBox(arrayModel::AbstractArray{<:Any,3},altMin::Float64,altMax::Float64,leftLimit::Float64, rightLimit::Float64,奥行きMin::Float64,奥行きMax::Float64; p1::GeoPoint=GeoPoint(0.0,-1.0),p2::GeoPoint=GeoPoint(0.0,1.0))
+function constructLocalBox(arrayModel::AbstractArray{<:Any,3},altMin::Float64,altMax::Float64,leftLimit::Float64, rightLimit::Float64,奥行きMin::Float64,奥行きMax::Float64; p1::GeoPoint=GeoPoint(0.0,-1.0),p2::GeoPoint=GeoPoint(0.0,1.0),centreOption=centreOption)
     # this function builds very differently the local box with respect to the following constructLocalBox functions
     # most of the time the user will not care the p1 and p2 when talking about the very local Cartesian coordinates so the treatment is not propre for the moment
     # 3D
@@ -299,13 +299,13 @@ end
 
 
 
-function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64 = 0.0, rightLimit::Float64=(p2-p1).radius)
+function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64 = 0.0, rightLimit::Float64=(p2-p1).radius,centreOption=centreOption)
 
     # 2D
     Δy = 1.0 # in metre as a dummy
     奥行きMin=0.0 # y axis range
     奥行きMax=1.0
-    output =constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit)
+    output =constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=leftLimit,rightLimit=rightLimit,centreOption=centreOption)
     allGridsInGeoPoints = output.allGridsInGeoPoints[:,1,:]
     allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
     effectiveRadii = output.effectiveRadii[:,1,:]
@@ -330,6 +330,9 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         xOrigin = -(p2-p1).radius/2.0
     elseif centreOption === "nothing"
         pOrigin = p1.ecef
+        xOrigin = 0.0
+    elseif centreOption === "centreOfPlanet"
+        pOrigin = SVector(0.0,0.0,0.0)
         xOrigin = 0.0
     end
 
