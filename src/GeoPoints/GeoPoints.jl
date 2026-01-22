@@ -138,10 +138,7 @@ function localCoord2D(ix::Integer,iz::Integer,Δx::Float64,Δz::Float64,pOrigin:
 end
 
 
-
-
-
-function GeoPoint(lat::Float64, lon::Float64; alt=0.0, ell=DEFAULT_ELLIPSOID[])
+function GeoPoint(lat::Float64,lon::Float64; alt=0.0, ell=DEFAULT_ELLIPSOID[])
     lla = LLA(lat,lon, alt) # be careful LLA uses degrees by default!!
     ecef_coords = ECEF(lla,ell)
     radius = norm([ecef_coords.x,ecef_coords.y,ecef_coords.z])
