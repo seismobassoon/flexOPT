@@ -57,7 +57,7 @@ function getParamsWithoutTopo(allGridsInGeoPoints,effectiveRadii;NradiusNodes=50
 
 
 
-    precision = GMTprecision(precisionInKm)  # this should be in Km
+    #precision = GMTprecision(precisionInKm)  # this should be in Km
 
 
     #seismicModel=(ρ=zeros(Float64,size(allGridsInGeoPoints)...),Vpv=zeros(Float64,size(allGridsInGeoPoints)...),Vph=zeros(Float64,size(allGridsInGeoPoints)...),Vsv=zeros(Float64,size(allGridsInGeoPoints)...),Vsh=zeros(Float64,size(allGridsInGeoPoints)...),Qμ=zeros(Float64,size(allGridsInGeoPoints)...),Qκ=zeros(Float64,size(allGridsInGeoPoints)...),QμPower=zeros(Float64,size(allGridsInGeoPoints)...),QκPower=zeros(Float64,size(allGridsInGeoPoints)...),η=zeros(Float64,size(allGridsInGeoPoints)...))
