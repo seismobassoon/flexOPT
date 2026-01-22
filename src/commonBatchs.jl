@@ -1,12 +1,13 @@
 module commonBatchs
 
     # batch files
-
+    using Symbolics
   
     include("batchFiles/batchDrWatson.jl")
     include("batchFiles/batchImages.jl")
     include("batchFiles/batchUseful.jl")
     include("batchFiles/batchStagYY.jl")
+    include("batchFiles/batchSymbolics.jl")
 
     export myProduceOrLoad,lazyProduceOrLoad, @strdict
     export getColorPalette, regenerataionColorMap, color2Float
@@ -18,5 +19,8 @@ module commonBatchs
     # batchStagYY
     export myListDir,readStagYYFiles,readStagYYFilesAverage
     export quarterDiskExtrapolationRawGrid!, quarterDiskExtrapolation
+    # symbolify
+
+    export mySimplify
 
 end
