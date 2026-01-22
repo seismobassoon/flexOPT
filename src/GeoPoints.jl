@@ -31,7 +31,7 @@ module GeoPoints
     export GeoPoint, +, -, /, *
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
-    export getParamsAndTopo #, interpolate_params, GMTprecision
+    export getParamsAndTopo,getParamsWithoutTopo #, interpolate_params, GMTprecision
     export makeAdHocSeismicModel,initiateSeismicModel # soon we need to make a structure of seismicModel (1D-3D)
     
 
