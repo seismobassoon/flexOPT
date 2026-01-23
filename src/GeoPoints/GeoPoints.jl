@@ -247,6 +247,12 @@ end
 
 p_ECEF_to_local(p_3D::SVector{3,Float64},pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) = R' * (p_3D - pOrigin)
 
+function p_ECEF_to_local2D(p_3D::SVector{3,Float64},pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) 
+    coord3D=R' * (p_3D - pOrigin)
+    coord2D = SVector(coord3D[1],coord3D[3])
+    return coord2D
+end
+
 p_local_to_ECEF(x_2D,z_2D,pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) = pOrigin+R*SVector(x_2D,0.e0,z_2D)
 
 p_local_to_ECEF(vec2D::SVector{2,Float64},pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) = pOrigin+R*SVector(vec2D[1],0.e0,vec2D[2])
@@ -269,7 +275,7 @@ function constructLocalBox(arrayModel::AbstractArray{<:Any,2},altMin::Float64,al
     allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
     effectiveRadii = output.effectiveRadii[:,1,:]
     return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
-            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz)
+            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz,pOriginECEF=output.pOriginECEF,rotationMatrix=output.rotationMatrix)
 end
 
 function constructLocalBox(arrayModel::AbstractArray{<:Any,3},altMin::Float64,altMax::Float64,leftLimit::Float64, rightLimit::Float64,奥行きMin::Float64,奥行きMax::Float64; p1::GeoPoint=GeoPoint(0.0,-1.0),p2::GeoPoint=GeoPoint(0.0,1.0),centreOption="nothing")
@@ -310,7 +316,7 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,a
     allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
     effectiveRadii = output.effectiveRadii[:,1,:]
     return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
-            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz)
+            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz,pOriginECEF=output.pOriginECEF,rotationMatrix=output.rotationMatrix)
 end
 
 
@@ -334,7 +340,7 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         xOrigin = 0.0
     elseif centreOption === "centreOfPlanet"
         pOrigin = SVector(0.0,0.0,0.0)
-        xOrigin = 0.0
+        xOrigin = -(p2-p1).radius/2.0
     end
 
     pCentre = SVector(0.0,0.0,0.0) # This is the default centre of the planet to measure the local vertical vectors
@@ -357,14 +363,14 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         tmpLocalPoint=localCoord3D(ix,iy,iz,Δx,Δy,Δz,pOrigin,R;startX=xOrigin+leftLimit-Δx,startY=奥行きMin-Δy,startZ=altMin-Δz,pCentre=pCentre)
         tmpGeoPoint=GeoPoint(p_local_to_ECEF(tmpLocalPoint.xyz,pOrigin,R))
         
-        allGridsInGeoPoints[iXYZ]=tmpGeoPoint
+        allGridsInGeoPoints[iXYZ] = tmpGeoPoint
         allGridsInCartesian[iXYZ] = tmpLocalPoint
 
         effectiveRadii[iXYZ]=effectiveRadius(tmpGeoPoint,planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 )
     end
 
     return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
-            Nx=Nx,Ny=Ny,Nz=Nz,Δx=Δx,Δy=Δy,Δz=Δz)
+            Nx=Nx,Ny=Ny,Nz=Nz,Δx=Δx,Δy=Δy,Δz=Δz,pOriginECEF=pOrigin,rotationMatrix=R)
     
 end
 

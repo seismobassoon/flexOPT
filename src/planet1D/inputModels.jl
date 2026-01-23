@@ -12,6 +12,46 @@ using CSV, DataFrames,BenchmarkTools
     readTopographyModel(modelFile::String): This function will read the topography model in XXX format
     """
 
+
+DEFAULT_1D_MODEL = Ref(:PREM) #getSet1Dmodel! can change this
+
+function getSet1Dmodel!(name::Symbol;modelPath::String="")
+    DEFAULT_1D_MODEL[]=name
+    my1DDSMmodel=modify1DModel(name,modelPath)
+    return my1DDSMmodel
+end
+
+function modify1DModel(name::Symbol,modelPath::String)
+    if name == :PREM
+        planet1D.input.modelFile = "earth/PREM.psv.model"
+    elseif name == :ak135
+        planet1D.input.modelFile = "earth/ak135.psv.model"
+    elseif name == :iasp
+        planet1D.input.modelFile = "earth/iasp.psv.model"
+    elseif name == :vprem
+        planet1D.input.modelFile = "moon/vprem.psv.model"
+    elseif name == :DWAKr
+        planet1D.input.modelFile = "mars/DWAKr.psv.model"
+    elseif name == :DWThot
+        planet1D.input.modelFile = "mars/DWThot.psv.model"
+    elseif name == :DWThotCrust1r
+        planet1D.input.modelFile = "mars/DWThotCrust1r.psv.model"
+    elseif name == :DWThotCrust1
+        planet1D.input.modelFile = "mars/DWThotCrust1.psv.model"
+    elseif name == :EH45Tcold
+        planet1D.input.modelFile = "mars/EH45Tcold.psv.model"
+    elseif name == :TAYAKr
+        planet1D.input.modelFile = "mars/TAYAKr.psv.model"
+    elseif modelPath !== ""
+        planet1D.input.modelFile = modelPath
+    else
+         error("Unknown model: $name")
+    end
+    modelFile=dirname(@__FILE__)*"/../"*planet1D.dsm1Dconfig.modelFolder*"/"*planet1D.input.modelFile
+    my1DDSMmodel=read1DModel(modelFile)
+    return my1DDSMmodel
+end
+
 function readConvertedModel(rawArray::Vector{Any})
     
     # first we need to know the model type
@@ -108,8 +148,10 @@ end
 
 
 
+
 # Below are the execution commands
 
+#my1DDSMmodel=modify1DModel(DEFAULT_1D_MODEL[],"")
 
 
 

@@ -13,8 +13,7 @@ module planet1D
         # https://github.com/SciML/DiffEqGPU.jl
     #using SeisBase
 
-
-
+ 
 
     #greet() = print("Hello World!")
 
@@ -22,11 +21,18 @@ module planet1D
     include("planet1D/mainStructures.jl")
     export compute1DseismicParamtersFromPolynomialCoefficients
     include("planet1D/inputParams.jl")
+
     include("planet1D/inputModels.jl")
+    export getSet1Dmodel!,DEFAULT_1D_MODEL
+    my1DDSMmodel=getSet1Dmodel!(DEFAULT_1D_MODEL[])
+ 
 
     # if geodynamic model -> use another function and get parameter conversion
-    modelFile=dirname(@__FILE__)*"/"*planet1D.dsm1Dconfig.modelFolder*"/"*planet1D.input.modelFile
-    @time my1DDSMmodel=read1DModel(modelFile)
+
+    
+    
+    #modelFile=dirname(@__FILE__)*"/"*planet1D.dsm1Dconfig.modelFolder*"/"*planet1D.input.modelFile
+    #my1DDSMmodel=read1DModel(modelFile)
 
     # for kernel computations, it is still interesting to make a regular grid in r and θ
 

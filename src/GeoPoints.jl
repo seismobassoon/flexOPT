@@ -28,14 +28,13 @@ module GeoPoints
 
     # functions GeoPoints
     export DEFAULT_PLANET,DEFAULT_ELLIPSOID, planet_ellipsoid, set_default_planet!, localCoord2D, localCoord3D
+    export p_ECEF_to_local, p_local_to_ECEF, p_ECEF_to_local2D
     export GeoPoint, +, -, /, *
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
     export getParamsAndTopo,getParamsWithoutTopo #, interpolate_params, GMTprecision
     export makeAdHocSeismicModel,initiateSeismicModel # soon we need to make a structure of seismicModel (1D-3D)
     
-
-
     # functions imageReader
     export defineModel
     export read2DimageModel

@@ -60,7 +60,7 @@ try
     paramFile= dirname(@__FILE__) *"/../"*Main.ParamFile
     data = CSV.read(paramFile,DataFrame; header=false, comment="#")
     dic=Dict(Pair.(data.Column1, data.Column2))
-    input.modelFile=strip(dic["modelFile"])
+    # input.modelFile=strip(dic["modelFile"]) # we get this differently now!
     if haskey(dic,"averagedPlanetRadius")
         input.averagedPlanetRadius=uparse(strip(dic["averagedPlanetRadius"]))
     else
