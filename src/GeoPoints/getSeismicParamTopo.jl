@@ -82,25 +82,13 @@ function getParamsWithoutTopo(allGridsInGeoPoints,effectiveRadii;NradiusNodes=50
 
     # get the extremeties in lat and lon
 
-    lats = [p.lat for p in allGridsInGeoPoints]
-    lons = [p.lon for p in allGridsInGeoPoints]
-
-
-    
 
     for i in CartesianIndices(allGridsInGeoPoints)
         tmpPoint = allGridsInGeoPoints[i]
-        if 0.0 < tmpPoint.alt <= topoInterpolater(tmpPoint.lon,tmpPoint.lat) 
-            # it might be very time-consuming if we do this for 3D Cartesian points ...
-            effectiveRadii[i]=planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
-     
-        end
-
-
-        # NF needs to give topography file
+       
 
         if hasAirModel === false
-            if topoInterpolater(tmpPoint.lon,tmpPoint.lat) <tmpPoint.alt
+            if 0.0 < tmpPoint.alt
                 seismicModel.ρ[i]=ρAir
                 seismicModel.Vpv[i]=VpAir
                 seismicModel.Vph[i]=VpAir
@@ -113,19 +101,6 @@ function getParamsWithoutTopo(allGridsInGeoPoints,effectiveRadii;NradiusNodes=50
 
     seismicModel = interpolate_params(params, newRadii, effectiveRadii)
 
-     for i in CartesianIndices(allGridsInGeoPoints)
-        tmpPoint = allGridsInGeoPoints[i]
-        # water column correction
-        if topoInterpolater(tmpPoint.lon,tmpPoint.lat)<=tmpPoint.alt <= 0.0
-
-            seismicModel.ρ[i]=ρWater
-            seismicModel.Vpv[i]=VpWater
-            seismicModel.Vph[i]=VpWater
-            seismicModel.Vsv[i]=0.0
-            seismicModel.Vsh[i]=0.0
-
-        end
-    end
 
 
     return seismicModel
