@@ -23,6 +23,10 @@ module Neurthino
     const N_A = 6.022e23 #[mol^-1]
     const G_F = 8.961877245622253e-38 #[eV*cm^3]
 
+    DEFAULT_PLANET = Ref(:Earth)
+
+
+
     # Julia 1.0 compatibility - normally obsolete
     #isnothing(::Any) = false
     #isnothing(::Nothing) = true
@@ -30,12 +34,12 @@ module Neurthino
     #specific sources
 
     include("Neurthino/Oscillation.jl")
-    include("Neurthino/Matter.jl")
-    include("Neurthino/earthModels2Dor3D.jl")
-    include("Neurthino/Earthmodels.jl")
-    include("Neurthino/premFunctions.jl")
-    include("Neurthino/usefulFunctionsToPlot.jl")
-    include("Neurthino/NeurthinoRelated.jl")
+    #include("Neurthino/Matter.jl")
+    #include("Neurthino/earthModels2Dor3D.jl")
+    #include("Neurthino/Earthmodels.jl")
+    #include("Neurthino/premFunctions.jl")
+    #include("Neurthino/usefulFunctionsToPlot.jl")
+    #include("Neurthino/NeurthinoRelated.jl")
 
 
     
