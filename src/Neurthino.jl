@@ -47,7 +47,7 @@ module Neurthino
     
     export N_A, G_F
     export oscprob
-    export set_default_flavour!,U, H
+    export set_default_flavour!, U, H
 
 
 
