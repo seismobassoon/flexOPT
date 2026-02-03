@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "709632d1cf3fdc08a77b739f7dce335f268f112d"
+project_hash = "0cc6229f19b450fad208586e407863ce0229b052"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "8be2ae325471fc20b11c27bb34b518541d07dd3a"
@@ -467,6 +467,12 @@ deps = ["Serialization", "Sockets"]
 git-tree-sha1 = "d9d26935a0bcffc87d2613ce14c527c99fc543fd"
 uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
 version = "2.5.0"
+
+[[deps.Conda]]
+deps = ["Downloads", "JSON", "VersionParsing"]
+git-tree-sha1 = "8f06b0cfa4c514c7b9546756dbae91fcfbc92dc9"
+uuid = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+version = "1.10.3"
 
 [[deps.Configurations]]
 deps = ["ExproniconLite", "OrderedCollections", "TOML"]
@@ -1134,6 +1140,20 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "b3d8be712fbf9237935bde0ce9b5a736ae38fc34"
 uuid = "a51ab1cf-af8e-5615-a023-bc2c838bba6b"
 version = "76.2.0+0"
+
+[[deps.IJulia]]
+deps = ["Base64", "Conda", "Dates", "InteractiveUtils", "Logging", "Markdown", "Pkg", "PrecompileTools", "Printf", "REPL", "Random", "SHA", "Sockets", "UUIDs", "ZMQ"]
+git-tree-sha1 = "dff8af3ab4f632d959ef19726b85939328ba289c"
+uuid = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+version = "1.34.1"
+
+    [deps.IJulia.extensions]
+    IJuliaPythonCallExt = "PythonCall"
+    IJuliaReviseExt = "Revise"
+
+    [deps.IJulia.weakdeps]
+    PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+    Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
@@ -3200,6 +3220,11 @@ git-tree-sha1 = "d1d9a935a26c475ebffd54e9c7ad11627c43ea85"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 version = "0.21.72"
 
+[[deps.VersionParsing]]
+git-tree-sha1 = "58d6e80b4ee071f5efd07fda82cb9fbe17200868"
+uuid = "81def892-9a0e-5fdd-b105-ffc91e053289"
+version = "1.3.0"
+
 [[deps.Wayland_jll]]
 deps = ["Artifacts", "EpollShim_jll", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
 git-tree-sha1 = "96478df35bbc2f3e1e791bc7a3d0eeee559e60e9"
@@ -3355,6 +3380,18 @@ git-tree-sha1 = "a1c0c7585346251353cddede21f180b96388c403"
 uuid = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 version = "0.4.16"
 
+[[deps.ZMQ]]
+deps = ["FileWatching", "PrecompileTools", "Printf", "Sockets", "ZeroMQ_jll"]
+git-tree-sha1 = "5f1c7008e2258c61af0eafef8c1f536b9fffbbd2"
+uuid = "c2297ded-f4af-51ae-bb23-16f91089e4e1"
+version = "1.5.1"
+
+[[deps.ZeroMQ_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "libsodium_jll"]
+git-tree-sha1 = "766d90db2817565b667c1cc9cc420d668f2e8dba"
+uuid = "8f1865be-045e-5c20-9c9f-bfbfb0764568"
+version = "4.3.6+0"
+
 [[deps.ZipFile]]
 deps = ["Libdl", "Printf", "Zlib_jll"]
 git-tree-sha1 = "f492b7fe1698e623024e873244f10d89c95c340a"
@@ -3466,6 +3503,12 @@ deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "Libdl", "libpng_jll"]
 git-tree-sha1 = "c1733e347283df07689d71d61e14be986e49e47a"
 uuid = "075b6546-f08a-558a-be8f-8157d0f608a5"
 version = "1.10.5+0"
+
+[[deps.libsodium_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "011b0a7331b41c25524b64dc42afc9683ee89026"
+uuid = "a9144af2-ca23-56d9-984f-0d03f7b5ccf8"
+version = "1.0.21+0"
 
 [[deps.libvorbis_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Ogg_jll"]
