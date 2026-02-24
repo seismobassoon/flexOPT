@@ -57,7 +57,15 @@ function integralBsplineTaylorKernels1DWithWindow1D(BsplineOrder,WBsplineOrder,�
 
     kernelValue=0.0
    
+    maximumOrder = maximum((BsplineOrder,WBsplineOrder,0)) # even if we only use the indicator functions (classical FD), we will call it for modμ (which we do not use for classical FD)
+    params=@strdict maximumOrder numberNodes = L
+
+    #output,_=@produce_or_load(BsplineTimesPolynomialsIntegrated,params,datadir("BsplineInt");filename = config -> savename("Bspline",params))
     
+    output=myProduceOrLoad(BsplineTimesPolynomialsIntegrated,params,"BsplineInt","Bspline")
+    #@show output
+    nodeIndices,nodesSymbolic,b_deriv,integral_b,Δx,extFns,x,modμ =output["BsplineIntegraters"]
+
 
     if BsplineOrder=== -1
         # this is for an indicator function
@@ -66,15 +74,9 @@ function integralBsplineTaylorKernels1DWithWindow1D(BsplineOrder,WBsplineOrder,�
         else
             kernelValue=0
         end
-    else
-        maximumOrder = maximum((BsplineOrder,WBsplineOrder))
-        params=@strdict maximumOrder numberNodes = L
 
-        #output,_=@produce_or_load(BsplineTimesPolynomialsIntegrated,params,datadir("BsplineInt");filename = config -> savename("Bspline",params))
+    else
         
-        output=myProduceOrLoad(BsplineTimesPolynomialsIntegrated,params,"BsplineInt","Bspline")
-        #@show output
-        nodeIndices,nodesSymbolic,b_deriv,integral_b,Δx,extFns,x,modμ =output["BsplineIntegraters"]
         
         # here we make a function Y_μ' Y_μ K_μ' K_μ (details ommitted)
         # note that ν is somewhere middle or at extremeties and 'ν+' expression is ommitted 
