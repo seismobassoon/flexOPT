@@ -478,7 +478,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     Ajiννᶜ .= 0
     AjiννᶜU .= 0
     indexLinearα = 1
-   
+    
     for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
         α = bigα[iExpr,iField]
         for eachα ∈ α

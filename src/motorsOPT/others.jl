@@ -215,7 +215,7 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
 
   
 
-    @show modifiedμ_vector = Float64.(car2vec(μpointsIndices[μ_oneD]))
+    modifiedμ_vector = Float64.(car2vec(μpointsIndices[μ_oneD]))
 
 
    
@@ -274,7 +274,7 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     
     aa=transpose(tmpTaylorExpansionCoeffs)*tmpTaylorExpansionCoeffs
     aa=Num2Float64.(aa)
-    @show typeof(aa),aa,size(aa)
+    typeof(aa),aa,size(aa)
     invaa= myInv(aa)
     tmpCˡηlocal=invaa*transpose(tmpTaylorExpansionCoeffs)
 
