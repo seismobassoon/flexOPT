@@ -3,30 +3,6 @@
 
 
 
-function OPTobj_temporarily_obsolete(operatorConfigurations::Dict)
-    # this is just a wrapper for the OPTobj function below, for DrWatson package
-    @unpack myEquationInside, Δnum, orderBtime, orderBspace, WorderBtime,WorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
-
-    TaylorOptions=(WorderBtime=WorderBtime,WorderBspace=WorderBspace,supplementaryOrder=supplementaryOrder)
-    trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
-    @time operatorData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)
-    #AjiννᶜU=operatorData[1]
-    #utilities=operatorData[2]   
-
-    operatorForceData=nothing
-    # if you do not want to apply external forces, it is possible to skip below
-    if IneedExternalSources 
-        @time operatorForceData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)  
-        #@show Γg = operatorForceData[1]
-        #utilitiesForce = operatorForceData[2]
-    end
-    eqInfo=(exprs=exprs,fields=fields,vars=vars,extexprs=extexprs,extfields=extfields,extvars=extvars,coordinates=coordinates)
-    operators=(operatorPDE=operatorData, operatorForce=operatorForceData,eqInfo=eqInfo)
-    return @strdict(operators)
-end
-
-
-
 function OPTobj(OPTconfig::Dict)
     @unpack myEquationInside, Δnum, TaylorOptions, trialFunctionsCharacteristics = OPTconfig
 
@@ -482,7 +458,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
         α = bigα[iExpr,iField]
         for eachα ∈ α
-            @show nodeValue=eachα.node
+            @show nodeValue=eachα.nod
             for x ∈ pointsIndices
                 xLinear = LI_points[vec2car(x)]
                 
@@ -564,4 +540,35 @@ end
             output[xᶜ, x, α] = acc
         end
     end
+end
+
+
+
+
+
+# below should be removed at some point
+
+
+
+
+function OPTobj_temporarily_obsolete(operatorConfigurations::Dict)
+    # this is just a wrapper for the OPTobj function below, for DrWatson package
+    @unpack myEquationInside, Δnum, orderBtime, orderBspace, WorderBtime,WorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
+
+    TaylorOptions=(WorderBtime=WorderBtime,WorderBspace=WorderBspace,supplementaryOrder=supplementaryOrder)
+    trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
+    @time operatorData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)
+    #AjiννᶜU=operatorData[1]
+    #utilities=operatorData[2]   
+
+    operatorForceData=nothing
+    # if you do not want to apply external forces, it is possible to skip below
+    if IneedExternalSources 
+        @time operatorForceData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)  
+        #@show Γg = operatorForceData[1]
+        #utilitiesForce = operatorForceData[2]
+    end
+    eqInfo=(exprs=exprs,fields=fields,vars=vars,extexprs=extexprs,extfields=extfields,extvars=extvars,coordinates=coordinates)
+    operators=(operatorPDE=operatorData, operatorForce=operatorForceData,eqInfo=eqInfo)
+    return @strdict(operators)
 end
