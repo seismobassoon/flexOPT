@@ -72,7 +72,7 @@ function integralBsplineTaylorKernels1DWithWindow1D(BsplineOrder,WBsplineOrder,Î
         if l_n_variable === 0 && l_n_field === 0
             kernelValue=1.0
         else
-            kernelValue=0
+            kernelValue=0.0
         end
 
     else
