@@ -458,7 +458,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
         α = bigα[iExpr,iField]
         for eachα ∈ α
-            @show nodeValue=eachα.nod
+            @show nodeValue=eachα.node
             for x ∈ pointsIndices
                 xLinear = LI_points[vec2car(x)]
                 
