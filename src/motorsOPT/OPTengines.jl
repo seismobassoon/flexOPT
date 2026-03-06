@@ -396,7 +396,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     end
     int_gpu = makeGPUarray(backend,int_total_float32)
     
-
+    
 
     output_gpu = makeGPUarray(backend, zeros(Float32, nPoints, nPoints, nTotalSmallα))
     
@@ -458,7 +458,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
         α = bigα[iExpr,iField]
         for eachα ∈ α
-            @show nodeValue=eachα.node
+            nodeValue=eachα.node
             for x ∈ pointsIndices
                 xLinear = LI_points[vec2car(x)]
                 
