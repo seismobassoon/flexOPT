@@ -42,7 +42,7 @@ function integralBsplineTaylorKernels1DWithWindow1D(BsplineOrder,WBsplineOrder,�
     # \int dx Bspline Y_μᶜ Y_μ  K_{lᶜ-nᶜ}(y-y_μᶜ) K_{l-n}(y-y_μ)
 
     # unlike the previous integralBsplineTaylorKernels1D, it computes for a specific ν
-    # Cˡη;μ are computed for a specific geometry, so even though the boundary condition reduce
+    # Cˡη;μ are computed for a specific geometry, so even though the boundary condition reduces
     # the number of available points, each Taylor expansion for K_{l-n}(y-y_μ) should be Ok
     
     # however, the 'forgotten' μ (due to the whole) should be treated carefully 
@@ -66,7 +66,8 @@ function integralBsplineTaylorKernels1DWithWindow1D(BsplineOrder,WBsplineOrder,�
     #@show output
     nodeIndices,nodesSymbolic,b_deriv,integral_b,Δx,extFns,x,modμ =output["BsplineIntegraters"]
 
-
+    @show "coucou "
+    @show modμ
     if BsplineOrder=== -1
         # this is for an indicator function
         if l_n_variable === 0 && l_n_field === 0
