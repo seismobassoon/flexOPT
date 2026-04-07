@@ -290,6 +290,34 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     return Cˡηlocal
 end
 
+function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsCharacteristics,TaylorOptions)
+
+
+    timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
+    @unpack orderBtime, orderBspace, pointsInSpace, pointsInTime = trialFunctionsCharacteristics
+    @unpack WorderBtime, WorderBspace,supplementaryOrder = TaylorOptions
+
+    NtypeofExpr=length(exprs)   # number of governing equations
+    NtypeofMaterialVariables=length(vars) # number of material coefficients
+    NtypeofFields=length(fields) # number of unknown fields
+    
+    Ndimension = length(coordinates) # we do not change this for the moment, especially for the time-marching scheme
+    pointsUsed = ones(Int, Ndimension).*(pointsInSpace+1)
+    if timeMarching
+        pointsUsed[end]=pointsInTime+1
+    end
+
+
+    if length(Δnum) !== Ndimension 
+        @error "the numerical delta increment has not the same dimension!"
+    end
+    
+    return timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed
+
+end
+
+
+
 
 #
 #
