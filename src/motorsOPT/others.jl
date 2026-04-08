@@ -304,9 +304,11 @@ function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsChar
     Ndimension = length(coordinates) # we do not change this for the moment, especially for the time-marching scheme
     pointsUsed = ones(Int, Ndimension).*(pointsInSpace)
     pointsμUsed = ones(Int, Ndimension).*(pointsμInSpace)
+    offsetsμUsed = ones(Float64, Ndimension).*offsetμInΔyInSpace 
     if timeMarching
         pointsUsed[end]=pointsInTime
         pointsμUsed[end]=pointsμInTime
+        offsetsμUsed[end]=offsetμInΔyInTime
     end
 
 
@@ -314,7 +316,7 @@ function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsChar
         @error "the numerical delta increment has not the same dimension!"
     end
     
-    return timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed,pointsμUsed
+    return timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed,pointsμUsed,offsetsμUsed
 
 end
 
