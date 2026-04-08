@@ -294,17 +294,19 @@ function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsChar
 
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
-    @unpack orderBtime, orderBspace, pointsInSpace, pointsInTime = trialFunctionsCharacteristics
-    @unpack WorderBtime, WorderBspace,supplementaryOrder = TaylorOptions
+    @unpack orderBtime,orderBspace,pointsInSpace,pointsInTime = trialFunctionsCharacteristics
+    @unpack WorderBtime,WorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
 
     NtypeofExpr=length(exprs)   # number of governing equations
     NtypeofMaterialVariables=length(vars) # number of material coefficients
     NtypeofFields=length(fields) # number of unknown fields
     
     Ndimension = length(coordinates) # we do not change this for the moment, especially for the time-marching scheme
-    pointsUsed = ones(Int, Ndimension).*(pointsInSpace+1)
+    pointsUsed = ones(Int, Ndimension).*(pointsInSpace)
+    pointsμUsed = ones(Int, Ndimension).*(pointsμInSpace)
     if timeMarching
-        pointsUsed[end]=pointsInTime+1
+        pointsUsed[end]=pointsInTime
+        pointsμUsed[end]=pointsμInTime
     end
 
 
@@ -312,7 +314,7 @@ function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsChar
         @error "the numerical delta increment has not the same dimension!"
     end
     
-    return timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed
+    return timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed,pointsμUsed
 
 end
 
