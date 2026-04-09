@@ -316,11 +316,37 @@ function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsChar
         @error "the numerical delta increment has not the same dimension!"
     end
     
-    return timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed,pointsμUsed,offsetsμUsed
+    numbersOfTheSystem=(timeMarching=timeMarching,NtypeofExpr=NtypeofExpr,NtypeofMaterialVariables=NtypeofMaterialVariables,NtypeofFields=NtypeofFields,Ndimension=Ndimension,pointsUsed=pointsUsed,pointsμUsed=pointsμUsed,offsetsμUsed=offsetsμUsed)
+
+    return numbersOfTheSystem
 
 end
 
+function investigateDependencies()
+    variableDependency=ones(Int,Ndimension)
+    fieldDependency=ones(Int,Ndimension)
+    eachVariableDependency=ones(Int,Ndimension,NtypeofMaterialVariables) 
+    eachFieldDependency=ones(Int,Ndimension,NtypeofFields)
+  
+    for iFields in 1:NtypeofFields
+        eachFieldDependency[:,iFields]=findCartesianDependency(fields[iFields],Ndimension,∂)
+        fieldDependency = fieldDependency .* (ones(Int,Ndimension).-eachFieldDependency[:,iFields])
+    end
 
+
+    for iVars in 1:NtypeofMaterialVariables
+        eachVariableDependency[:,iVars]=findCartesianDependency(vars[iVars],Ndimension,∂)
+        variableDependency = variableDependency .* (ones(Int,Ndimension).-eachVariableDependency[:,iVars])
+    end
+
+    
+
+    fieldDependency = ones(Int,Ndimension).-fieldDependency
+    variableDependency = ones(Int,Ndimension).-variableDependency
+
+    # here we correct variableDependency with fieldDependency: if fieldDependency is zero then we do not take care of that dimension for the variables
+    variableDependency = variableDependency .* fieldDependency
+end
 
 
 #
