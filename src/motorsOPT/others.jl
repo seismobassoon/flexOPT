@@ -290,13 +290,14 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     return Cˡηlocal
 end
 
-function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsCharacteristics,TaylorOptions)
+function numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptions)
 
-
-    timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
+    @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
     @unpack orderBtime,orderBspace,pointsInSpace,pointsInTime = trialFunctionsCharacteristics
     @unpack WorderBtime,WorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
 
+    timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
+   
     NtypeofExpr=length(exprs)   # number of governing equations
     NtypeofMaterialVariables=length(vars) # number of material coefficients
     NtypeofFields=length(fields) # number of unknown fields
@@ -322,7 +323,16 @@ function numbersOfTheExpression(exprs,fields,vars,coordinates,trialFunctionsChar
 
 end
 
-function investigateDependencies()
+function investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptions)
+
+    @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
+    @unpack timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed,pointsμUsed,offsetsμUsed=numbersOfTheSystem
+    @unpack orderBtime,orderBspace,pointsInSpace,pointsInTime = trialFunctionsCharacteristics
+    @unpack WorderBtime,WorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
+
+
+    #region overall coordinate dependency check
+
     variableDependency=ones(Int,Ndimension)
     fieldDependency=ones(Int,Ndimension)
     eachVariableDependency=ones(Int,Ndimension,NtypeofMaterialVariables) 
@@ -346,9 +356,107 @@ function investigateDependencies()
 
     # here we correct variableDependency with fieldDependency: if fieldDependency is zero then we do not take care of that dimension for the variables
     variableDependency = variableDependency .* fieldDependency
+
+    #endregion
+
+   
+    #region definition of points in time and space to be used
+
+    # heaviside(x) = x > 0 ? 1 : x == 0 ? 0 : -1
+
+    # the orders of B-spline functions, depending on fields 
+
+    orderBspline=zeros(Int,Ndimension)
+    WorderBspline=zeros(Int,Ndimension)
+
+    if timeMarching
+        orderBspline[Ndimension]=orderBtime*fieldDependency[Ndimension]
+        orderBspline[1:Ndimension-1]=orderBspace*fieldDependency[1:Ndimension-1]
+        WorderBspline[Ndimension]=WorderBtime*fieldDependency[Ndimension]
+        WorderBspline[1:Ndimension-1]=WorderBspace*fieldDependency[1:Ndimension-1]
+    else
+        orderBspline[1:Ndimension]=orderBspace*fieldDependency[1:Ndimension]
+        WorderBspline[1:Ndimension]=WorderBspace*fieldDependency[1:Ndimension]
+    end
+    
+    # the maximum number of points used in the vicinity of the node, which is independent of the order of B-spline functions (see our paper)
+    pointsUsedForFields=(pointsUsed.-1).*fieldDependency.+1
+
+    # orderExpressions is the maximal orders of partials that we could expect in the expressions
+    orderExpressions=pointsUsedForFields
+    
+    # numbers of points to evaluate the integral for the governing equation filtered by the test functions
+    
+    # orderU is the maximum orders for the fields that we will use for OPT coefficients' exploration
+    orderU = (orderExpressions .-1) .+ (supplementaryOrder .*fieldDependency).+1 
+    # we restore this orderU since we need to control this 
+
+    #endregion
+
+    #region Preparation for Taylor expansion
+    
+        orderTaylors=Array{Any,Ndimension}(undef,Tuple(orderU))
+        pointsInSpaceTime=Array{Any,Ndimension}(undef,Tuple(pointsUsedForFields))
+        
+        multiOrdersIndices=CartesianIndices(orderTaylors)
+
+        availablePointsConfigurations = Array{Array{Vector{Int64},Ndimension},1}()
+        centrePointConfigurations=Array{Int64,1}()
+
+    #endregion
+
+
+    #region Cartesian indices that can be available to use (normally: iGeometry=1)
+
+        multiPointsIndices=CartesianIndices(pointsInSpaceTime)
+        # this is the whole local Cartesian grids (without any lacking points)
+        
+        tmpVecForMiddlePoint = ((car2vec(multiPointsIndices[end]).-1 ).÷2 ).+1 # only valid for testOnlyCentre
+        midTimeCoord = nothing
+        if timeMarching
+            midTimeCoord=car2vec(multiPointsIndices[end])[end]-1
+            tmpVecForMiddlePoint[end]=midTimeCoord
+            #AjiννᶜU = Array{Num,2}(undef,length(multiPointsIndices)÷(midTimeCoord+1),NtypeofExpr)
+        end
+        #@show tmpVecForMiddlePoint 
+        middleν=vec2car(tmpVecForMiddlePoint)
+
+        availablePointsConfigurations=push!(availablePointsConfigurations,car2vec.(multiPointsIndices))
+        centrePointConfigurations=push!(centrePointConfigurations,LinearIndices(multiPointsIndices)[middleν])
+        #@show size(availablePointsConfigurations)
+    #endregion
+
+
+    dependencies = (variableDependency=variableDependency,fieldDependency=fieldDependency,eachVariableDependency=eachVariableDependency,eachFieldDependency=eachFieldDependency)
+    ordersForSplines = (orderBspline=orderBspline,WorderBspline=WorderBspline,orderExpressions=orderExpressions,orderU=orderU)
+    configsTaylor = (multiOrdersIndices=multiOrdersIndices,availablePointsConfigurations=availablePointsConfigurations,centrePointConfigurations=centrePointConfigurations)
+
+    return dependencies,ordersForSplines,configsTaylor
 end
 
 
+function bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplines)
+
+    NtypeofFields = numbersOfTheSystem.NtypeofFields
+    NtypeofExpr = numbersOfTheSystem.NtypeofExpr
+    @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
+    @unpack orderBspline,WorderBspline,orderExpressions,orderU = ordersForSplines
+
+    bigα=Array{Any,2}(missing,NtypeofFields,NtypeofExpr)
+    varM=nothing
+    pointsUsedForFields=orderExpressions
+
+    for iExpr in eachindex(exprs)
+        for iField in eachindex(fields)
+            
+            tmpNonZeroAlphas=PDECoefFinder(orderExpressions,coordinates,exprs[iExpr],fields[iField],vars) 
+            # we assume that the pointsUsedForFields represent the highest order of partials
+            bigα[iField,iExpr]=unique(tmpNonZeroAlphas)
+        end
+    end
+    varM=varMmaker(pointsUsedForFields,coordinates,vars,∂)
+    return bigα,varM
+end
 #
 #
 #
