@@ -2,6 +2,7 @@ module commonBatchs
 
     # batch files
     using Symbolics
+    using StaticArrays
   
     include("batchFiles/batchDrWatson.jl")
     include("batchFiles/batchImages.jl")
@@ -9,6 +10,7 @@ module commonBatchs
     include("batchFiles/batchStagYY.jl")
     include("batchFiles/batchSymbolics.jl")
 
+    export SVector
     export myProduceOrLoad,lazyProduceOrLoad, @strdict, @unpack
     export getColorPalette, regenerataionColorMap, color2Float
     export safeget

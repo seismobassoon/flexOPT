@@ -429,7 +429,7 @@ function investigateDependencies(equationCharacteristics,numbersOfTheSystem,tria
         # μ points for interpolated Taylor expansion
         # pointsμUsed = the number of μ ; offsetsμUsed = offsets from the extremeties (in Δy)
 
-        tmpμCoordinates = Array{Float64,Ndimension}(undef,Tuple(pointsμUsed))
+        tmpμCoordinates = Array{SVector{3,Float64}}(undef, pointsμUsed...)
 
         tmpDistancesInΔy = Float64.(availablePointsConfigurations[1][end].-ones(Float64,Ndimension))
         tmpΔμ=(tmpDistancesInΔy.-2.0*offsetsμUsed)
@@ -438,7 +438,7 @@ function investigateDependencies(equationCharacteristics,numbersOfTheSystem,tria
                 tmpΔμ[iCoord]=tmpΔμ[iCoord]/(pointsμUsed[iCoord]-1)
             end
         end
-      
+        @show tmpμCoordinates
         for iμ in CartesianIndices(tmpμCoordinates)
             #tmpμCoordinates[iμ]=ones(Float64,Ndimension).+offsetsμUsed+(Float64.(car2vec(iμ)).-ones(Float64,Ndimension)).*tmpΔμ
             @show iμ
