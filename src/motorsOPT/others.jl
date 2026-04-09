@@ -401,12 +401,14 @@ function investigateDependencies(equationCharacteristics,numbersOfTheSystem,tria
         multiOrdersIndices=CartesianIndices(orderTaylors)
 
         availablePointsConfigurations = Array{Array{Vector{Int64},Ndimension},1}()
+        availableμPoints = Array{Array{Vector{Float64},Ndimension},1}()
         centrePointConfigurations=Array{Int64,1}()
 
     #endregion
 
 
     #region Cartesian indices that can be available to use (normally: iGeometry=1)
+    # here for the moment we just use one mid point in the space and time so iGeometry = 1 only
 
         multiPointsIndices=CartesianIndices(pointsInSpaceTime)
         # this is the whole local Cartesian grids (without any lacking points)
@@ -421,11 +423,25 @@ function investigateDependencies(equationCharacteristics,numbersOfTheSystem,tria
         #@show tmpVecForMiddlePoint 
         middleν=vec2car(tmpVecForMiddlePoint)
 
+        # μ points for interpolated Taylor expansion
+        # pointsμUsed = the number of μ ; offsetsμUsed = offsets from the extremeties (in Δy)
+
+        tmpμCoordinates = Array{Float64,Ndimension}(undef,Tuple(pointsμUsed))
+
+        for μ in eachindex(tmpμCoordinates)
+            
+        end
+
         availablePointsConfigurations=push!(availablePointsConfigurations,car2vec.(multiPointsIndices))
         centrePointConfigurations=push!(centrePointConfigurations,LinearIndices(multiPointsIndices)[middleν])
         #@show size(availablePointsConfigurations)
     #endregion
 
+
+
+
+
+    
 
     dependencies = (variableDependency=variableDependency,fieldDependency=fieldDependency,eachVariableDependency=eachVariableDependency,eachFieldDependency=eachFieldDependency)
     ordersForSplines = (orderBspline=orderBspline,WorderBspline=WorderBspline,orderExpressions=orderExpressions,orderU=orderU)
