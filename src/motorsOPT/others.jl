@@ -423,17 +423,29 @@ function investigateDependencies(equationCharacteristics,numbersOfTheSystem,tria
         #@show tmpVecForMiddlePoint 
         middleν=vec2car(tmpVecForMiddlePoint)
 
+        availablePointsConfigurations=push!(availablePointsConfigurations,car2vec.(multiPointsIndices))
+        centrePointConfigurations=push!(centrePointConfigurations,LinearIndices(multiPointsIndices)[middleν])
+
         # μ points for interpolated Taylor expansion
         # pointsμUsed = the number of μ ; offsetsμUsed = offsets from the extremeties (in Δy)
 
         tmpμCoordinates = Array{Float64,Ndimension}(undef,Tuple(pointsμUsed))
 
-        for μ in eachindex(tmpμCoordinates)
-            
+        tmpDistancesInΔy = Float64.(availablePointsConfigurations[1][end].-ones(Float64,Ndimension))
+        tmpΔμ=(tmpDistancesInΔy.-2.0*offsetsμUsed)
+        for iCoord in 1:Ndimension
+            if pointsμUsed[iCoord]>1
+                tmpΔμ[iCoord]=tmpΔμ[iCoord]/(pointsμUsed[iCoord]-1)
+            end
         end
-
-        availablePointsConfigurations=push!(availablePointsConfigurations,car2vec.(multiPointsIndices))
-        centrePointConfigurations=push!(centrePointConfigurations,LinearIndices(multiPointsIndices)[middleν])
+      
+        for iμ in CartesianIndices(tmpμCoordinates)
+            #tmpμCoordinates[iμ]=ones(Float64,Ndimension).+offsetsμUsed+(Float64.(car2vec(iμ)).-ones(Float64,Ndimension)).*tmpΔμ
+            @show iμ
+            #tmpμCoordinates[iμ]=offsetsμUsed
+        end
+        availableμPoints=push!(availableμPoints,tmpμCoordinates)
+        
         #@show size(availablePointsConfigurations)
     #endregion
 
@@ -445,7 +457,7 @@ function investigateDependencies(equationCharacteristics,numbersOfTheSystem,tria
 
     dependencies = (variableDependency=variableDependency,fieldDependency=fieldDependency,eachVariableDependency=eachVariableDependency,eachFieldDependency=eachFieldDependency)
     ordersForSplines = (orderBspline=orderBspline,WorderBspline=WorderBspline,orderExpressions=orderExpressions,orderU=orderU)
-    configsTaylor = (multiOrdersIndices=multiOrdersIndices,availablePointsConfigurations=availablePointsConfigurations,centrePointConfigurations=centrePointConfigurations)
+    configsTaylor = (multiOrdersIndices=multiOrdersIndices,availablePointsConfigurations=availablePointsConfigurations,centrePointConfigurations=centrePointConfigurations,availableμPoints=availableμPoints)
 
     return dependencies,ordersForSplines,configsTaylor
 end
