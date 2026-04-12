@@ -22,7 +22,10 @@ module commonBatchs
     export myListDir,readStagYYFiles,readStagYYFilesAverage
     export quarterDiskExtrapolationRawGrid!, quarterDiskExtrapolation
     # symbolify
-
+    export x,y,z,t
+    export ∂x,∂y,∂z,∂t
+    export ∂x²,∂y²,∂z²,∂t² 
+    export Num2Float64,usefulPartials,myCoeff,mySolvefor,mySimplify,integrateTaylorPolynomials
     export mySimplify
 
 end
