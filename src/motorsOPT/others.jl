@@ -294,11 +294,10 @@ function numbersOfTheExpression(equationCharacteristics,
                                trialFunctionsCharacteristics,
                                TaylorOptions)
 
-    @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
-    @unpack orderBtime,orderBspace,pointsInSpace,pointsInTime = trialFunctionsCharacteristics
-    @unpack WorderBtime,WorderBspace,supplementaryOrder,
-            pointsμInSpace,pointsμInTime,
-            offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
+    @unpack exprs, fields, vars, coordinates = equationCharacteristics
+    @unpack pointsInSpace, pointsInTime = trialFunctionsCharacteristics
+    @unpack pointsμInSpace, pointsμInTime,
+            offsetμInΔyInSpace, offsetμInΔyInTime = TaylorOptions
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
 
@@ -328,6 +327,7 @@ function numbersOfTheExpression(equationCharacteristics,
         NtypeofExpr = NtypeofExpr,
         NtypeofMaterialVariables = NtypeofMaterialVariables,
         NtypeofFields = NtypeofFields,
+        nCoordinates = Ndimension,
         Ndimension = Val(Ndimension),   # 🔥 key change
         pointsUsed = pointsUsed,
         pointsμUsed = pointsμUsed,
@@ -340,9 +340,7 @@ function investigateDependencies(equationCharacteristics,
                                  trialFunctionsCharacteristics,
                                  TaylorOptions)
 
-    @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
-    @unpack timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,
-            Ndimension,pointsUsed,pointsμUsed,offsetsμUsed = numbersOfTheSystem
+        @unpack Ndimension = numbersOfTheSystem
 
     return _investigateDependencies(Ndimension,
                                    equationCharacteristics,
@@ -490,10 +488,9 @@ end
 
 function bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplines)
 
-    NtypeofFields = numbersOfTheSystem.NtypeofFields
-    NtypeofExpr = numbersOfTheSystem.NtypeofExpr
-    @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
-    @unpack orderBspline,WorderBspline,orderExpressions,orderU = ordersForSplines
+    @unpack NtypeofExpr, NtypeofFields = numbersOfTheSystem
+    @unpack exprs,fields,vars,coordinates,∂ = equationCharacteristics
+    @unpack orderExpressions = ordersForSplines
 
     bigα=Array{Any,2}(missing,NtypeofFields,NtypeofExpr)
     varM=nothing
