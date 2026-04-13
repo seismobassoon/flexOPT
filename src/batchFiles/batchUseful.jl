@@ -1,5 +1,5 @@
 # In this code, I collect some useful macros and functions 
-using LinearAlgebra, JLD2
+using LinearAlgebra, JLD2, StaticArrays
 
 #good old safeget
 safeget(A, inds...; default=0) = checkbounds(Bool, A, inds...) ? A[inds...] : default
@@ -64,9 +64,11 @@ function string_as_varname(s::AbstractString,v::Any)
 end
 
 car2vec(x::CartesianIndex) = collect(Tuple(x))
+car2svec(x::CartesianIndex{N}) where N = SVector{N}(Tuple(x))
 carDropDim(x::CartesianIndex) = CartesianIndex(Tuple(car2vec(x)[1:end-1]))
 carAddDim(x::CartesianIndex,n::Int) = CartesianIndex(Tuple([car2vec(x);n]))
 vec2car(x::Array{Int})=CartesianIndex(Tuple(vec(x))) 
+svec2car(v::SVector{N,T}) where {N,T} = CartesianIndex(Tuple(v))
 
 function flatten(x)
     if isa(x, AbstractVector)

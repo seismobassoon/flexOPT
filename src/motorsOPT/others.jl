@@ -63,7 +63,7 @@ function varMmaker(maxPointsUsed,coordinates,vars,∂)
         smallVarM=Symbolics.variables(Symbol(newstring),1:length(R))
         for j in R
             linearJ=LinearIndices(R)[j]
-            realJ=(car2vec(j).-1).*CartesianDependency .+1 # if there is no dependence on a direction, it should get the same name
+            realJ=(car2svec(j).-1).*CartesianDependency .+1 # if there is no dependence on a direction, it should get the same name
             linearRealJ=LinearIndices(R)[CartesianIndex(realJ...)]
             smallVarM[linearJ]=smallVarM[linearRealJ]
         end
@@ -173,7 +173,7 @@ function TaylorCoefInversion(coefInversionDict::Dict)
     end
 
     #@show vcat(deep_flatten(pointsIndices))
-    #@show pointsIndices = vec2car(vcat(deep_flatten(pointsIndices)),Ndimension)
+    #@show pointsIndices = svec2car(vcat(deep_flatten(pointsIndices)),Ndimension)
     #pointsIndices=to_cartesian_list(pointsIndices,Ndimension)
     pointsIndices = vec(CartesianIndex.(Tuple.(pointsIndices)))
     μpointsIndices = pointsIndices # which can be changed 
@@ -215,7 +215,7 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
 
   
 
-    modifiedμ_vector = Float64.(car2vec(μpointsIndices[μ_oneD]))
+    modifiedμ_vector = Float64.(car2svec(μpointsIndices[μ_oneD]))
 
 
    
@@ -257,11 +257,11 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
         η_μ = tmpPointsIndices[iAvailablePoint]
         #η = tmpPointsIndices[i]-pointsIndices[μ]
         #η = tmpPointsIndices[i] - modifiedμ_vector
-        η = Float64.(car2vec(η_μ)) .- modifiedμ_vector 
+        η = Float64.(car2svec(η_μ)) .- modifiedμ_vector 
         distances= η .* Δ
         for j in multiOrdersIndices
             linearJ = LinearIndices(multiOrdersIndices)[j]
-            orders = car2vec(j).-1
+            orders = car2svec(j).-1
             numerator = prod(distances .^orders)
             denominator=prod(factorial.(orders))
             tmpTaylorCoeffs = numerator/denominator
@@ -311,12 +311,12 @@ function numbersOfTheExpression(equationCharacteristics,
     # 🔥 cleaner + no broadcast
     pointsUsed   = fill(pointsInSpace, Ndimension)
     pointsμUsed  = fill(pointsμInSpace, Ndimension)
-    offsetsμUsed = fill(offsetμInΔyInSpace, Ndimension)
+    offsetsμUsed = fill(Float64(offsetμInΔyInSpace), Ndimension)
 
     if timeMarching
         pointsUsed[end]   = pointsInTime
         pointsμUsed[end]  = pointsμInTime
-        offsetsμUsed[end] = offsetμInΔyInTime
+        offsetsμUsed[end] = Float64(offsetμInΔyInTime)
     end
 
     if length(Δnum) != Ndimension
@@ -418,39 +418,48 @@ function _investigateDependencies(::Val{N},
     availableμPoints = Vector{Any}()
     centrePointConfigurations = Int[]
 
-    # ---------------- Middle point ----------------
 
-    tmpVec = ((car2vec(multiPointsIndices[end]) .- 1) .÷ 2) .+ 1
+    # in order to propose other middle points, we need to make a loop below
 
-    if timeMarching
-        tmpVec[end] = car2vec(multiPointsIndices[end])[end] - 1
-    end
+    numberGeometries = 1
 
-    middleν = vec2car(tmpVec)
+    for i in 1:numberGeometries
 
-    push!(availablePointsConfigurations, car2vec.(multiPointsIndices))
-    push!(centrePointConfigurations,
-          LinearIndices(multiPointsIndices)[middleν])
+        # ---------------- Middle point ----------------
+    
 
-    # ---------------- μ coordinates ----------------
+        tmpVec = ((car2vec(multiPointsIndices[end]) .- 1) .÷ 2) .+ 1
 
-    tmpμCoordinates = Array{SVector{N,Float64}}(undef, pointsμUsed...)
-
-    tmpDistances = Float64.(availablePointsConfigurations[1][end] .- 1)
-    tmpΔμ = tmpDistances .- 2 .* offsetsμUsed
-
-    for i in 1:N
-        if pointsμUsed[i] > 1
-            tmpΔμ[i] /= (pointsμUsed[i] - 1)
+        if timeMarching
+            tmpVec[end] = car2vec(multiPointsIndices[end])[end] - 1
         end
-    end
 
-    for I in CartesianIndices(tmpμCoordinates)
-        idx = SVector{N}(Tuple(I))   # 🔥 correct use of SVector
-        tmpμCoordinates[I] = offsetsμUsed .+ (idx .- 1.0) .* tmpΔμ
-    end
+        middleν = vec2car(tmpVec)
 
-    push!(availableμPoints, tmpμCoordinates)
+        push!(availablePointsConfigurations, car2svec.(multiPointsIndices))
+        push!(centrePointConfigurations,
+            LinearIndices(multiPointsIndices)[middleν])
+
+        # ---------------- μ coordinates ----------------
+
+        tmpμCoordinates = Array{SVector{N,Float64}}(undef, pointsμUsed...)
+
+        tmpDistances = Float64.(availablePointsConfigurations[1][end] .- 1)
+        tmpΔμ = tmpDistances .- 2 .* offsetsμUsed
+
+        for i in 1:N
+            if pointsμUsed[i] > 1
+                tmpΔμ[i] /= (pointsμUsed[i] - 1)
+            end
+        end
+
+        for I in CartesianIndices(tmpμCoordinates)
+            idx = SVector{N}(Tuple(I))   # 🔥 correct use of SVector
+            tmpμCoordinates[I] = offsetsμUsed .+ (idx .- 1.0) .* tmpΔμ
+        end
+
+        push!(availableμPoints, tmpμCoordinates)
+    end
 
     # ---------------- Outputs ----------------
 
@@ -469,7 +478,8 @@ function _investigateDependencies(::Val{N},
     )
 
     configsTaylor = (
-        multiOrdersIndices = multiOrdersIndices,
+        numberGeometries = numberGeometries,
+        multiOrdersIndices = multiOrdersIndices, # we still need this since available points can differ
         availablePointsConfigurations = availablePointsConfigurations,
         centrePointConfigurations = centrePointConfigurations,
         availableμPoints = availableμPoints
@@ -631,17 +641,17 @@ function investigateDependencies_(equationCharacteristics,numbersOfTheSystem,tri
         multiPointsIndices=CartesianIndices(pointsInSpaceTime)
         # this is the whole local Cartesian grids (without any lacking points)
         
-        tmpVecForMiddlePoint = ((car2vec(multiPointsIndices[end]).-1 ).÷2 ).+1 # only valid for testOnlyCentre
+        tmpVecForMiddlePoint = ((car2svec(multiPointsIndices[end]).-1 ).÷2 ).+1 # only valid for testOnlyCentre
         midTimeCoord = nothing
         if timeMarching
-            midTimeCoord=car2vec(multiPointsIndices[end])[end]-1
+            midTimeCoord=car2svec(multiPointsIndices[end])[end]-1
             tmpVecForMiddlePoint[end]=midTimeCoord
             #AjiννᶜU = Array{Num,2}(undef,length(multiPointsIndices)÷(midTimeCoord+1),NtypeofExpr)
         end
         #@show tmpVecForMiddlePoint 
-        middleν=vec2car(tmpVecForMiddlePoint)
+        middleν=svec2car(tmpVecForMiddlePoint)
 
-        availablePointsConfigurations=push!(availablePointsConfigurations,car2vec.(multiPointsIndices))
+        availablePointsConfigurations=push!(availablePointsConfigurations,car2svec.(multiPointsIndices))
         centrePointConfigurations=push!(centrePointConfigurations,LinearIndices(multiPointsIndices)[middleν])
 
         # μ points for interpolated Taylor expansion
@@ -658,7 +668,7 @@ function investigateDependencies_(equationCharacteristics,numbersOfTheSystem,tri
         end
         @show tmpμCoordinates
         for iμ in CartesianIndices(tmpμCoordinates)
-            #tmpμCoordinates[iμ]=ones(Float64,Ndimension).+offsetsμUsed+(Float64.(car2vec(iμ)).-ones(Float64,Ndimension)).*tmpΔμ
+            #tmpμCoordinates[iμ]=ones(Float64,Ndimension).+offsetsμUsed+(Float64.(car2svec(iμ)).-ones(Float64,Ndimension)).*tmpΔμ
             @show iμ
             #tmpμCoordinates[iμ]=offsetsμUsed
         end
@@ -708,18 +718,18 @@ function illposedTaylorCoefficientsInversion(coordinates,multiOrdersIndices,mult
     CˡηGlobal = Array{Any,3}(undef,numberOfEtas,numberOfLs,numberOfEtas)
    
 
-    tmpVecForMiddlePoint = (car2vec(multiPointsIndices[end]).-1 ).÷2 .+1 # only valid for testOnlyCentre
+    tmpVecForMiddlePoint = (car2svec(multiPointsIndices[end]).-1 ).÷2 .+1 # only valid for testOnlyCentre
     midTimeCoord=nothing
     if timeMarching
-        midTimeCoord=car2vec(multiPointsIndices[end])[end]-1
+        midTimeCoord=car2svec(multiPointsIndices[end])[end]-1
         tmpVecForMiddlePoint[end]=midTimeCoord
     end
-    midK=vec2car(tmpVecForMiddlePoint)
+    midK=svec2car(tmpVecForMiddlePoint)
 
     for k in multiPointsIndices
         linearK = LinearIndices(multiPointsIndices)[k]
         
-        if !testOnlyCentre || k === midK || (timeMarching && car2vec(k)[end] === midTimeCoord && !testOnlyCentre) # because we cannot predict more than one futures
+        if !testOnlyCentre || k === midK || (timeMarching && car2svec(k)[end] === midTimeCoord && !testOnlyCentre) # because we cannot predict more than one futures
             CˡηGlobal[:,:,linearK]=illposedTaylorCoefficientsInversionSingleCentre(numberOfLs,numberOfEtas,multiOrdersIndices,multiPointsIndices,Δ,k)
         end
     end 
@@ -742,11 +752,11 @@ function illposedTaylorCoefficientsInversionSingleCentre(numberOfLs,numberOfEtas
     TaylorExpansionCoeffs = Array{Num,2}(undef,numberOfLs,numberOfEtas)
     for i in multiPointsIndices
         linearI = LinearIndices(multiPointsIndices)[i]
-        η = car2vec(i-k)
+        η = car2svec(i-k)
         distances= η .* Δ
         for j in multiOrdersIndices
             linearJ = LinearIndices(multiOrdersIndices)[j]
-            orders = car2vec(j).-1
+            orders = car2svec(j).-1
             numerator = prod(distances .^orders)
             denominator=prod(factorial.(orders))
             tmpTaylorCoeffs = numerator/denominator
@@ -765,8 +775,8 @@ end
 
 
 function spaceCoordinatesConversionfunctions(absorbingBoundaries, NdimensionMinusTime)
-    offset_model = vec2car(absorbingBoundaries[1, 1:NdimensionMinusTime])
-    #offset_empty = vec2car(spacePointsUsed)
+    offset_model = svec2car(absorbingBoundaries[1, 1:NdimensionMinusTime])
+    #offset_empty = svec2car(spacePointsUsed)
 
     model2whole(a::CartesianIndex) = a + offset_model
     whole2model(a::CartesianIndex) = a - offset_model
@@ -787,7 +797,7 @@ function BouncingCoordinates(a::CartesianIndex,PointsUsed)
     if length(a) !== length(PointsUsed)
         @error "cannot bound this CartesianIndex due to the dimension mismatch"
     end
-    avector=car2vec(a)
+    avector=car2svec(a)
     for iCoord in eachindex(avector)
         if avector[iCoord] < 1
             avector[iCoord] = 1
@@ -795,6 +805,6 @@ function BouncingCoordinates(a::CartesianIndex,PointsUsed)
             avector[iCoord] = PointsUsed[iCoord]
         end
     end
-    a=vec2car(avector)
+    a=svec2car(avector)
     return a
 end
