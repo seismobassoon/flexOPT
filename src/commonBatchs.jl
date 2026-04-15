@@ -10,7 +10,7 @@ module commonBatchs
     include("batchFiles/batchStagYY.jl")
     include("batchFiles/batchSymbolics.jl")
 
-    export SVector
+    export SVector, @SVector
     export myProduceOrLoad,lazyProduceOrLoad, @strdict, @unpack
     export getColorPalette, regenerataionColorMap, color2Float
     export safeget

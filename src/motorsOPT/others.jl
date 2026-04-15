@@ -164,7 +164,7 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     # be careful that pointsIndices is now a 1D array of integer vectors!!
 
-    @unpack coordinates,multiOrdersIndices,pointsIndices, Δ, WorderBspline, modifiedμ = coefInversionDict
+    @unpack coordinates,multiOrdersIndices,pointsIndices, Δ, YorderBspline, modifiedμ = coefInversionDict
 
     Ndimension=length(coordinates)
 
@@ -189,14 +189,14 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     for μ_oneD in axes(CˡηGlobal,3)
         #@show typeof(multiOrdersIndices),typeof(pointsIndices)
-        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD,WorderBspline,modifiedμ)
+        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD,YorderBspline,modifiedμ)
     end 
 
     return @strdict(CˡηGlobal)
 
 end
 
-function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD,WorderBspline,modifiedμ)
+function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD,YorderBspline,modifiedμ)
 
 
     # the old version is : illposedTaylorCoefficientsInversionSingleCentre
@@ -206,7 +206,7 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     
     # for this pointsIndices are filtered for every μ
     
-    Ndimension = length(WorderBspline)
+    Ndimension = length(YorderBspline)
 
     tmpPointsIndices = []
     linearIndicesUsed = []
@@ -224,18 +224,18 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
         η_μ = pointsIndices[i]
         iSayWeSayGo = 1
         for iCoord in 1:Ndimension # Ndimension
-            #@show 1,μ_oneD,μpointsIndices[μ_oneD][iCoord],WorderBspline[iCoord]+1, iCoord
-            #tmp1=Num2Float64(modifiedμ[iCoord][1,μ,WorderBspline[iCoord]+1])
-            #tmp2=Num2Float64(modifiedμ[iCoord][2,μ,WorderBspline[iCoord]+1])
-            #tmp3=Num2Float64(modifiedμ[iCoord][3,μ,WorderBspline[iCoord]+1])
+            #@show 1,μ_oneD,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1, iCoord
+            #tmp1=Num2Float64(modifiedμ[iCoord][1,μ,YorderBspline[iCoord]+1])
+            #tmp2=Num2Float64(modifiedμ[iCoord][2,μ,YorderBspline[iCoord]+1])
+            #tmp3=Num2Float64(modifiedμ[iCoord][3,μ,YorderBspline[iCoord]+1])
             
-            tmp1=Num2Float64(safeget(modifiedμ[iCoord],1,μpointsIndices[μ_oneD][iCoord],WorderBspline[iCoord]+1))
-            tmp2=Num2Float64(safeget(modifiedμ[iCoord],2,μpointsIndices[μ_oneD][iCoord],WorderBspline[iCoord]+1))
-            tmp3=Num2Float64(safeget(modifiedμ[iCoord],3,μpointsIndices[μ_oneD][iCoord],WorderBspline[iCoord]+1))
+            tmp1=Num2Float64(safeget(modifiedμ[iCoord],1,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1))
+            tmp2=Num2Float64(safeget(modifiedμ[iCoord],2,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1))
+            tmp3=Num2Float64(safeget(modifiedμ[iCoord],3,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1))
             #@show tmp1, tmp2, tmp3
 
             #modifiedμ_vector[iCoord] = tmp3
-            if WorderBspline[iCoord] === -1 # this will use Y everywhere (for ν+μ = ν)
+            if YorderBspline[iCoord] === -1 # this will use Y everywhere (for ν+μ = ν)
                 iSayWeSayGo *= 1
             elseif  tmp1 <=η_μ[iCoord] <= tmp2
                 iSayWeSayGo *= 1
@@ -359,7 +359,7 @@ function _investigateDependencies(::Val{N},
     @unpack timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,
             pointsUsed,pointsμUsed,offsetsμUsed = numbersOfTheSystem
     @unpack orderBtime,orderBspace = trialFunctionsCharacteristics
-    @unpack WorderBtime,WorderBspace,supplementaryOrder = TaylorOptions
+    @unpack YorderBtime,YorderBspace,supplementaryOrder = TaylorOptions
 
     # ---------------- Dependencies ----------------
 
@@ -387,17 +387,17 @@ function _investigateDependencies(::Val{N},
     # ---------------- Orders ----------------
 
     orderBspline  = zeros(Int, N)
-    WorderBspline = zeros(Int, N)
+    YorderBspline = zeros(Int, N)
 
     if timeMarching
         orderBspline[end] = orderBtime * fieldDependency[end]
         orderBspline[1:end-1] .= orderBspace .* fieldDependency[1:end-1]
 
-        WorderBspline[end] = WorderBtime * fieldDependency[end]
-        WorderBspline[1:end-1] .= WorderBspace .* fieldDependency[1:end-1]
+        YorderBspline[end] = YorderBtime * fieldDependency[end]
+        YorderBspline[1:end-1] .= YorderBspace .* fieldDependency[1:end-1]
     else
         orderBspline  .= orderBspace .* fieldDependency
-        WorderBspline .= WorderBspace .* fieldDependency
+        YorderBspline .= YorderBspace .* fieldDependency
     end
 
     pointsUsedForFields = (pointsUsed .- 1) .* fieldDependency .+ 1
@@ -470,7 +470,7 @@ function _investigateDependencies(::Val{N},
 
     ordersForSplines = (
         orderBspline = orderBspline,
-        WorderBspline = WorderBspline,
+        YorderBspline = YorderBspline,
         orderExpressions = orderExpressions,
         orderU = orderU
     )
@@ -519,7 +519,7 @@ function numbersOfTheExpression_(equationCharacteristics,trialFunctionsCharacter
 
     @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
     @unpack orderBtime,orderBspace,pointsInSpace,pointsInTime = trialFunctionsCharacteristics
-    @unpack WorderBtime,WorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
+    @unpack YorderBtime,YorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
    
@@ -553,7 +553,7 @@ function investigateDependencies_(equationCharacteristics,numbersOfTheSystem,tri
     @unpack exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂² = equationCharacteristics
     @unpack timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,Ndimension,pointsUsed,pointsμUsed,offsetsμUsed=numbersOfTheSystem
     @unpack orderBtime,orderBspace,pointsInSpace,pointsInTime = trialFunctionsCharacteristics
-    @unpack WorderBtime,WorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
+    @unpack YorderBtime,YorderBspace,supplementaryOrder,pointsμInSpace,pointsμInTime,offsetμInΔyInSpace,offsetμInΔyInTime = TaylorOptions
 
 
     #region overall coordinate dependency check
@@ -592,16 +592,16 @@ function investigateDependencies_(equationCharacteristics,numbersOfTheSystem,tri
     # the orders of B-spline functions, depending on fields 
 
     orderBspline=zeros(Int,Ndimension)
-    WorderBspline=zeros(Int,Ndimension)
+    YorderBspline=zeros(Int,Ndimension)
 
     if timeMarching
         orderBspline[Ndimension]=orderBtime*fieldDependency[Ndimension]
         orderBspline[1:Ndimension-1]=orderBspace*fieldDependency[1:Ndimension-1]
-        WorderBspline[Ndimension]=WorderBtime*fieldDependency[Ndimension]
-        WorderBspline[1:Ndimension-1]=WorderBspace*fieldDependency[1:Ndimension-1]
+        YorderBspline[Ndimension]=YorderBtime*fieldDependency[Ndimension]
+        YorderBspline[1:Ndimension-1]=YorderBspace*fieldDependency[1:Ndimension-1]
     else
         orderBspline[1:Ndimension]=orderBspace*fieldDependency[1:Ndimension]
-        WorderBspline[1:Ndimension]=WorderBspace*fieldDependency[1:Ndimension]
+        YorderBspline[1:Ndimension]=YorderBspace*fieldDependency[1:Ndimension]
     end
     
     # the maximum number of points used in the vicinity of the node, which is independent of the order of B-spline functions (see our paper)
@@ -681,7 +681,7 @@ function investigateDependencies_(equationCharacteristics,numbersOfTheSystem,tri
     
 
     dependencies = (variableDependency=variableDependency,fieldDependency=fieldDependency,eachVariableDependency=eachVariableDependency,eachFieldDependency=eachFieldDependency)
-    ordersForSplines = (orderBspline=orderBspline,WorderBspline=WorderBspline,orderExpressions=orderExpressions,orderU=orderU)
+    ordersForSplines = (orderBspline=orderBspline,YorderBspline=YorderBspline,orderExpressions=orderExpressions,orderU=orderU)
     configsTaylor = (multiOrdersIndices=multiOrdersIndices,availablePointsConfigurations=availablePointsConfigurations,centrePointConfigurations=centrePointConfigurations,availableμPoints=availableμPoints)
 
     return dependencies,ordersForSplines,configsTaylor

@@ -17,7 +17,7 @@ function OPTobj(OPTconfig::Dict)
 end
 
 
-function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBtime=1,WorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
+function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(YorderBtime=1,YorderBspace=1,supplementaryOrder=2), trialFunctionsCharacteristics=(orderBtime=1,orderBspace=1, pointsInSpace=2,pointsInTime=2))
 
     #region General introduction, some cautions
 
@@ -79,7 +79,7 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
 
 
     @unpack orderBtime, orderBspace, pointsInSpace, pointsInTime = trialFunctionsCharacteristics
-    @unpack WorderBtime, WorderBspace,supplementaryOrder = TaylorOptions
+    @unpack YorderBtime, YorderBspace,supplementaryOrder = TaylorOptions
 
     NtypeofExpr=length(exprs)   # number of governing equations
     NtypeofMaterialVariables=length(vars) # number of material coefficients
@@ -136,16 +136,16 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
     # the orders of B-spline functions, depending on fields 
 
     orderBspline=zeros(Int,Ndimension)
-    WorderBspline=zeros(Int,Ndimension)
+    YorderBspline=zeros(Int,Ndimension)
 
     if timeMarching
         orderBspline[Ndimension]=orderBtime*fieldDependency[Ndimension]
         orderBspline[1:Ndimension-1]=orderBspace*fieldDependency[1:Ndimension-1]
-        WorderBspline[Ndimension]=WorderBtime*fieldDependency[Ndimension]
-        WorderBspline[1:Ndimension-1]=WorderBspace*fieldDependency[1:Ndimension-1]
+        YorderBspline[Ndimension]=YorderBtime*fieldDependency[Ndimension]
+        YorderBspline[1:Ndimension-1]=YorderBspace*fieldDependency[1:Ndimension-1]
     else
         orderBspline[1:Ndimension]=orderBspace*fieldDependency[1:Ndimension]
-        WorderBspline[1:Ndimension]=WorderBspace*fieldDependency[1:Ndimension]
+        YorderBspline[1:Ndimension]=YorderBspace*fieldDependency[1:Ndimension]
     end
     
     # the maximum number of points used in the vicinity of the node, which is independent of the order of B-spline functions (see our paper)
@@ -223,15 +223,15 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
     Ulocals=[]
 
 
-    #AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+    #AmatrixSemiSymbolicGPU(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,YorderBspline,NtypeofExpr,NtypeofFields)
 
 
     for iConfigGeometry in eachindex(availablePointsConfigurations) 
         pointsIndices=availablePointsConfigurations[iConfigGeometry]
         middleLinearν=centrePointConfigurations[iConfigGeometry]
         #varM is given above for the max number of points used 
-        #tmpAjiννᶜU,tmpUlocal=AuSymbolic(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
-        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(myEquationOneSide,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields)
+        #tmpAjiννᶜU,tmpUlocal=AuSymbolic(coordinates,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,YorderBspline,NtypeofExpr,NtypeofFields)
+        coefsSemiSymbolic=AmatrixSemiSymbolicGPU(myEquationOneSide,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δnum,varM,bigα,orderBspline,YorderBspline,NtypeofExpr,NtypeofFields)
         Ajiννᶜs=push!(Ajiννᶜs,coefsSemiSymbolic.Ajiννᶜ)
         AjiννᶜUs=push!(AjiννᶜUs,coefsSemiSymbolic.AjiννᶜU)
         Ulocals=push!(Ulocals,coefsSemiSymbolic.Ulocal)
@@ -252,7 +252,7 @@ function OPTobj(exprs,fields,vars,coordinates,∂,Δnum;TaylorOptions=(WorderBti
 end
 
 
-function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,WorderBspline,NtypeofExpr,NtypeofFields;threads = 256,backend=backend)
+function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndices,multiPointsIndices,middleLinearν,Δ,varM,bigα,orderBspline,YorderBspline,NtypeofExpr,NtypeofFields;threads = 256,backend=backend)
 
     #region preparation
 
@@ -282,7 +282,7 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
     integral1DWYYKK = Array{Any,1}(undef,nCoordinates)
     modifiedμ=Array{Any,1}(undef,nCoordinates)
     for iCoord in eachindex(coordinates) # for each 
-        integralParams = @strdict oB =orderBspline[iCoord] oWB = WorderBspline[iCoord] νCoord=pointsIndices[middleLinearν][iCoord] LCoord = multiPointsIndices[end][iCoord] ΔCoord=Δ[iCoord] l_n_max=L_MINUS_N[end][iCoord]
+        integralParams = @strdict oB =orderBspline[iCoord] oWB = YorderBspline[iCoord] νCoord=pointsIndices[middleLinearν][iCoord] LCoord = multiPointsIndices[end][iCoord] ΔCoord=Δ[iCoord] l_n_max=L_MINUS_N[end][iCoord]
         output = myProduceOrLoad(getIntegralWYYKK,integralParams,"intKernel")
         integral1DWYYKK[iCoord] = output["intKernelforνLΔ"]
         modifiedμ[iCoord] = output["modμ"] # this can be still 'nothing'
@@ -294,9 +294,9 @@ function AmatrixSemiSymbolicGPU(myEquationInside,multiOrdersIndices,pointsIndice
 
     #region get CˡηGlobal (for ν)
 
-    coefInversionDict = @strdict coordinates multiOrdersIndices pointsIndices Δ WorderBspline modifiedμ
+    coefInversionDict = @strdict coordinates multiOrdersIndices pointsIndices Δ YorderBspline modifiedμ
 
-    #@show coordinates multiOrdersIndices pointsIndices Δ WorderBspline modifiedμ
+    #@show coordinates multiOrdersIndices pointsIndices Δ YorderBspline modifiedμ
 
     output=myProduceOrLoad(TaylorCoefInversion,coefInversionDict,"taylorCoefInv")
     Cˡη=output["CˡηGlobal"]
@@ -553,9 +553,9 @@ end
 
 function OPTobj_temporarily_obsolete(operatorConfigurations::Dict)
     # this is just a wrapper for the OPTobj function below, for DrWatson package
-    @unpack myEquationInside, Δnum, orderBtime, orderBspace, WorderBtime,WorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
+    @unpack myEquationInside, Δnum, orderBtime, orderBspace, YorderBtime,YorderBspace,supplementaryOrder,pointsInSpace, pointsInTime,IneedExternalSources, iExperiment= operatorConfigurations
 
-    TaylorOptions=(WorderBtime=WorderBtime,WorderBspace=WorderBspace,supplementaryOrder=supplementaryOrder)
+    TaylorOptions=(YorderBtime=YorderBtime,YorderBspace=YorderBspace,supplementaryOrder=supplementaryOrder)
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
     @time operatorData=OPTobj(myEquationInside,Δnum; trialFunctionsCharacteristics=trialFunctionsCharacteristics,TaylorOptions=TaylorOptions,iExperiment=iExperiment)
     #AjiννᶜU=operatorData[1]
