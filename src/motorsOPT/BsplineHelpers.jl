@@ -23,6 +23,8 @@ The returned `b` array stores piecewise symbolic expressions with layout
 `(segment, function, order_slot)`, where `order_slot = p + 2` corresponds to
 degree `p`.
 """
+
+
 function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=:ghost, correction_truncation = true)
     
 
@@ -42,6 +44,8 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
     ∂x = Differential(x)
 
     numberNodes = length(allNodes)
+    rangeSegments = idx_nodesNum[1]:idx_nodesNum[end]
+    numberNodesOnTheSegment = length(rangeSegments)
     NorderShiftedByTwo = maximumOrder + 2
 
     core_idx_refPoints = copy(idx_refPoints_original)
@@ -76,18 +80,19 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
     
 
     b = zeros(Num, numberNodes, numberFunctions, NorderShiftedByTwo)
-    b_to_give = zeros(Num, numberNodes, numberFunctionsOriginal, NorderShiftedByTwo)
+    b_to_give = zeros(Num, numberNodesOnTheSegment, numberFunctionsOriginal, NorderShiftedByTwo)
     b_deriv = zeros(Num, numberNodes, numberFunctions, NorderShiftedByTwo, NorderShiftedByTwo)
-    b_deriv_to_give = zeros(Num, numberNodes, numberFunctionsOriginal, NorderShiftedByTwo, NorderShiftedByTwo)
+    b_deriv_to_give = zeros(Num, numberNodesOnTheSegment, numberFunctionsOriginal, NorderShiftedByTwo, NorderShiftedByTwo)
     
     # -1 order indicator on the numerical support.
     slot = -1 + 2
-    b[idx_nodesNum[1]:idx_nodesNum[end], :, 1] .= 1
+    b[rangeSegments, :, 1] .= 1
     firstCentral = 1 + leftPlusNumberFunctions + maximumOrder
     lastCentral = firstCentral + numberFunctionsOriginal - 1
     centre_range = firstCentral:lastCentral
-    b_to_give[:,:,slot] = b[:,centre_range,slot]
-    b_deriv_to_give[:,:,:,slot] = b_deriv[:,centre_range,:,slot]
+    b_deriv[:,:,1,slot] = b[:,:,slot]
+    b_to_give[:,:,slot] = b[rangeSegments,centre_range,slot]
+    b_deriv_to_give[:,:,:,slot] = b_deriv[rangeSegments,centre_range,:,slot]
 
 
 
@@ -146,13 +151,13 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
     
         incrementDueToCentreShift -= Int((1 - (-1)^(p)) / 2)
         
-        @show firstCentral = leftPlusNumberFunctions + maximumOrder + 1 + incrementDueToCentreShift  
-        @show lastCentral = firstCentral + numberFunctionsOriginal - 1
+        firstCentral = leftPlusNumberFunctions + maximumOrder + 1 + incrementDueToCentreShift  
+        lastCentral = firstCentral + numberFunctionsOriginal - 1
         centre_range = firstCentral:lastCentral
 
 
-        b_to_give[:,:,slot] = b[:,centre_range,slot]
-        b_deriv_to_give[:,:,:,slot] = b_deriv[:,centre_range,:,slot]
+        b_to_give[:,:,slot] = b[rangeSegments,centre_range,slot]
+        b_deriv_to_give[:,:,:,slot] = b_deriv[rangeSegments,centre_range,:,slot]
 
 
         if correction_truncation && p > 0
@@ -339,12 +344,13 @@ function segment_grid(allNodes; N=10)
 end
 function plot_bspline_family(
     result;
+    order =0,
     derivOrder=0,
     N=10,
     Δxval=1.0,
     show_full=false,
 )
-    order = size(result.b, 4) - 2
+
     arr = show_full ? result.b_full : result.b
     ylabel_text = derivOrder == 0 ? "B-spline value" : "Derivative order $derivOrder"
 
@@ -372,8 +378,6 @@ function plot_bspline_family(
     axislegend(ax)
     return fig
 end
-
-
 
 function evaluate_bspline_piecewise_deriv(b_deriv, idx, derivSlot, orderSlot, ξ, allNodes, x, Δx; Δxval=1.0)
     segment = find_segment(ξ, allNodes)
