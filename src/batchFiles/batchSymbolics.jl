@@ -73,7 +73,34 @@ function mySimplify(eq)
     return neweq 
 end
 
-function integrateTaylorPolynomials(eq, x)
+
+function integrateTaylorPolynomials(eq, x; simplify_expr=mySimplify)
+    eq = simplify_expr(eq)
+
+    num, den = if Symbolics.isdiv(eq)
+        eq.num, eq.den
+    else
+        eq, 1
+    end
+
+    highestOrder = Symbolics.degree(num, x)
+    highestOrder isa Integer || error("expression is not a polynomial in $x")
+    highestOrder < 0 && return zero(num)
+
+    # constant term
+    neweq = Symbolics.substitute(num, Dict(x => 0)) * x
+
+    # positive powers
+    for i in 1:highestOrder
+        c = Symbolics.coeff(num, x^i)
+        neweq += c * x^(i + 1) / (i + 1)
+    end
+
+    return simplify_expr(neweq / den)
+end
+
+
+function integrateTaylorPolynomials_slow(eq, x)
     # this function works only for (positive) polynomials 
     #
     # the function needs only Symbolics.jl
@@ -128,6 +155,6 @@ function integrateTaylorPolynomials(eq, x)
 
     # the rest of tmpeq should be the constant
     neweq+=tmpeq*x
-    neweq//=denominator
+    neweq/=denominator
     return mySimplify(neweq)
 end

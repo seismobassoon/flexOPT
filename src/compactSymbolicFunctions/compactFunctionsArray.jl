@@ -237,7 +237,7 @@ function plotCompactSymbolicFunctions(csf::CompactSymbolicFunctions, slots::NTup
             end
             for ξ in ξgrid
         ]
-        lines!(ax, ξgrid, vals, label="B_$idx")
+        lines!(ax, ξgrid, vals, label="Fn Index : $idx")
     end
 
     vlines!(ax, allNodes; color=:gray70, linestyle=:dash)

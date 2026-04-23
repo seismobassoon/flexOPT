@@ -31,7 +31,7 @@ function constructTaylorExpansions(params;simplify_expr=mySimplify,)
         slot = l_n + 1
         denominator=1/factorial(BigInt(l_n))
         for iμ in eachindex(idx_selectedPoints)
-            pointCoord = allNodesSymbolic[iμ]
+            pointCoord = allNodesSymbolic[idx_selectedPoints[iμ]]
             taylorKernel.data[:,iμ,slot].=(x-pointCoord)^l_n*denominator
         end
     end
