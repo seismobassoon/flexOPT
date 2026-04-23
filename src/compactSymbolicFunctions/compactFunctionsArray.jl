@@ -201,23 +201,22 @@ Base.getindex(a::CompactSymbolicFunctions, I...) = a.data[I...]
 Base.size(a::CompactSymbolicFunctions) = size(a.data)
 
 
-function plotCompactSymbolicFunctions(csf; order=0, derivOrder=0, N=10, Δxval=1.0)
+function plotCompactSymbolicFunctions(csf::CompactSymbolicFunctions, slots::NTuple; N=10, Δxval=1.0,ylabel="Amplitude")
     allNodes = Symbolics.value.(csf.nodes)
     x = csf.variables[1]
     Δx = csf.variables[2]
 
-    orderSlot = order + 1
-    derivSlot = derivOrder + 1
+
     ξgrid = segment_grid(allNodes; N=N)
 
     fig = Figure(size=(900, 500))
-    ax = Axis(fig[1, 1], xlabel="x / Δx", ylabel="Derivative order $derivOrder")
+    ax = Axis(fig[1, 1], xlabel="x / Δx")
 
     for idx in 1:csf.numberFunctions
         vals = [
             begin
                 seg = find_segment(ξ, allNodes)
-                expr = csf.data[seg, idx, derivSlot, orderSlot]
+                expr = csf.data[seg, idx, slots...]
                 Symbolics.value(Symbolics.substitute(expr, Dict(x => ξ * Δxval, Δx => Δxval)))
             end
             for ξ in ξgrid

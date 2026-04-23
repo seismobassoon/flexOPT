@@ -1,5 +1,4 @@
 using Symbolics
-using CairoMakie
 
 # this source file was truly a fruit of some weeks of optimisations with codex (chatGPT) March-April 2026
 # Nobuaki Fuji, IPGP/UPC/IUF
@@ -23,35 +22,66 @@ The returned `b` array stores piecewise symbolic expressions with layout
 `(segment, function, order_slot)`, where `order_slot = p + 2` corresponds to
 degree `p`.
 """
-
-
-function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=:ghost, correction_truncation = true)
+function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:ghost,correction_truncation=true,)
     
-
     maximumOrder = params.maximumOrder
     allNodes = collect(params.allNodes)
-    idx_nodesNum = collect(params.idx_nodesNum) # an ordinary consecutive integer increment from 1 (the numerical nodes with Δy)
-    idx_refPoints_original = collect(params.idx_refPoints) # supporting nodes to construct the Bspline family
-    idx_selectedPoints = collect(params.idx_selectedPoints) # the node addresses that user needs to take 
+    idx_nodesNum = collect(params.idx_nodesNum)
+    idx_refPoints_original = collect(params.idx_refPoints)
+    idx_selectedPoints = collect(params.idx_selectedPoints)
 
-    if !issubset(Set(idx_selectedPoints),Set(idx_refPoints_original))
-        @error "idx_selectedPoints should be a subset of idx_refPoints_original"
-    end
+    issubset(Set(idx_selectedPoints), Set(idx_refPoints_original)) ||
+        error("idx_selectedPoints should be a subset of idx_refPoints_original")
 
-    selected_positions = indexin(Int.(idx_selectedPoints), Int.(idx_refPoints_original))
+    selected_positions = Int.(indexin(idx_selectedPoints, idx_refPoints_original))
 
     @variables x Δx
-    ∂x = Differential(x)
+    variables = Num[x, Δx]
 
-    numberNodes = length(allNodes)
     rangeSegments = idx_nodesNum[1]:idx_nodesNum[end]
-    numberNodesOnTheSegment = length(rangeSegments)
-    NorderShiftedByTwo = maximumOrder + 2
+    segmentNodes = allNodes[rangeSegments]
+    numberFunctionsOriginal = length(idx_refPoints_original)
+
+    # Special case: only p = -1 indicator family.
+    if maximumOrder == -1
+        b_basis_full = CompactSymbolicFunctions(
+            allNodes,
+            numberFunctionsOriginal;
+            auxDims=(1,),
+            variables=variables,
+        )
+        b_basis_support = CompactSymbolicFunctions(
+            segmentNodes,
+            numberFunctionsOriginal;
+            auxDims=(1,),
+            variables=variables,
+        )
+
+        b_basis_full.data[rangeSegments, :, 1] .= 1
+        b_basis_support.data[:, :, 1] .= 1
+
+        b_full = differentiate(b_basis_full, x, 0; simplify_expr=simplify_expr)
+        b_support = differentiate(b_basis_support, x, 0; simplify_expr=simplify_expr)
+        b = CompactSymbolicFunctions(
+            segmentNodes,
+            length(selected_positions);
+            auxDims=b_support.auxDims,
+            variables=variables,
+            init=b_support.data[:, selected_positions, :, :],
+        )
+
+        return (
+            b = b,
+            b_full = b_full,
+            b_support = b_support,
+        )
+    end
+
+    NorderShiftedByOne = maximumOrder + 1
 
     core_idx_refPoints = copy(idx_refPoints_original)
     leftPlusNumberFunctions = 0
     rightPlusNumberFunctions = 0
-
 
     if allNodes[core_idx_refPoints[1]] > allNodes[idx_nodesNum[1]]
         core_idx_refPoints = vcat(idx_nodesNum[1], core_idx_refPoints)
@@ -67,8 +97,8 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
     refKnots = extend_knots(coreKnots, maximumOrder; mode=boundary_mode)
     refKnotsSymbolic = Δx .* refKnots
 
-    numberFunctionsOriginal = length(idx_refPoints_original)
-    numberFunctions = length(refKnots) -1
+    numberFunctions = length(refKnots) - 1
+
     denominators = zeros(Num, 2, numberFunctions, maximumOrder)
     for p in 1:maximumOrder
         for idx in 1:numberFunctions-p
@@ -77,40 +107,36 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
         end
     end
 
-    
+    b_basis_full = CompactSymbolicFunctions(
+        allNodes,
+        numberFunctions;
+        auxDims=(NorderShiftedByOne,),
+        variables=variables,
+    )
 
-    b = zeros(Num, numberNodes, numberFunctions, NorderShiftedByTwo)
-    b_to_give = zeros(Num, numberNodesOnTheSegment, numberFunctionsOriginal, NorderShiftedByTwo)
-    b_deriv = zeros(Num, numberNodes, numberFunctions, NorderShiftedByTwo, NorderShiftedByTwo)
-    b_deriv_to_give = zeros(Num, numberNodesOnTheSegment, numberFunctionsOriginal, NorderShiftedByTwo, NorderShiftedByTwo)
-    
-    # -1 order indicator on the numerical support.
-    slot = -1 + 2
-    b[rangeSegments, :, 1] .= 1
-    firstCentral = 1 + leftPlusNumberFunctions + maximumOrder
-    lastCentral = firstCentral + numberFunctionsOriginal - 1
-    centre_range = firstCentral:lastCentral
-    b_deriv[:,:,1,slot] = b[:,:,slot]
-    b_to_give[:,:,slot] = b[rangeSegments,centre_range,slot]
-    b_deriv_to_give[:,:,:,slot] = b_deriv[rangeSegments,centre_range,:,slot]
+    b_basis_support = CompactSymbolicFunctions(
+        segmentNodes,
+        numberFunctionsOriginal;
+        auxDims=(NorderShiftedByOne,),
+        variables=variables,
+    )
 
-
-
-    incrementDueToCentreShift = 0
     for p in 0:maximumOrder
-        slot = p + 2
+        slot = p + 1
 
         if p == 0
             for idx in 1:numberFunctions
                 leftKnot = refKnots[idx]
                 rightKnot = refKnots[idx + 1]
                 support_segments = support_segment_indices(leftKnot, rightKnot, allNodes)
+
                 for seg in support_segments
-                    b[seg, idx, slot] = 1
+                    b_basis_full.data[seg, idx, slot] = 1
                 end
             end
         else
-            b[:, :, slot] .= 0
+            b_basis_full.data[:, :, slot] .= 0
+
             for idx in 1:numberFunctions-p
                 up = denominators[1, idx, p]
                 down = denominators[2, idx, p]
@@ -122,108 +148,117 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
 
                 for seg in active_segments_left
                     if !iszero_denominator(up)
-                        b[seg, idx, slot] += simplify_expr((x - leftKnot) / up * b[seg, idx, slot - 1])
+                        b_basis_full.data[seg, idx, slot] += simplify_expr(
+                            (x - leftKnot) / up * b_basis_full.data[seg, idx, slot - 1]
+                        )
                     end
                 end
 
                 for seg in active_segments_right
                     if !iszero_denominator(down)
-                        b[seg, idx, slot] += simplify_expr((rightKnot - x) / down * b[seg, idx + 1, slot - 1])
+                        b_basis_full.data[seg, idx, slot] += simplify_expr(
+                            (rightKnot - x) / down * b_basis_full.data[seg, idx + 1, slot - 1]
+                        )
                     end
                 end
             end
 
             if boundary_mode == :clamped
-                rebuild_clamped_residuals!(b, allNodes, refKnots, numberFunctions, slot, p, simplify_expr)
-            end
-
-        end
-
-        for pp in 0:1:p
-            if pp == 0
-                b_deriv[:,:,pp+1,slot] = b[:,:,slot]
-            else
-                b_deriv[:,:,pp+1,slot] = mySimplify.(∂x.(b_deriv[:,:,pp,slot]))
-            
+                rebuild_clamped_residuals!(
+                    b_basis_full.data,
+                    allNodes,
+                    refKnots,
+                    numberFunctions,
+                    slot,
+                    p,
+                    simplify_expr,
+                )
             end
         end
 
-    
-        incrementDueToCentreShift -= Int((1 - (-1)^(p)) / 2)
-        
-        firstCentral = leftPlusNumberFunctions + maximumOrder + 1 + incrementDueToCentreShift  
+        firstCentral = leftPlusNumberFunctions + maximumOrder + 1 - div(p + 1, 2)
         lastCentral = firstCentral + numberFunctionsOriginal - 1
         centre_range = firstCentral:lastCentral
 
-
-        b_to_give[:,:,slot] = b[rangeSegments,centre_range,slot]
-        b_deriv_to_give[:,:,:,slot] = b_deriv[rangeSegments,centre_range,:,slot]
-
+        b_basis_support.data[:, :, slot] .= b_basis_full.data[rangeSegments, centre_range, slot]
 
         if correction_truncation && p > 0
             left_support = support_segment_indices(refKnots[firstCentral], refKnots[firstCentral + p + 1], allNodes)
             right_support = support_segment_indices(refKnots[lastCentral], refKnots[lastCentral + p + 1], allNodes)
 
-            b_to_give[:, 1, slot] .= 0
-            b_to_give[:, end, slot] .= 0
+            b_basis_support.data[:, 1, slot] .= 0
+            b_basis_support.data[:, end, slot] .= 0
 
             for seg in left_support
+                seg_local = local_segment_index(seg, rangeSegments)
+                isnothing(seg_local) && continue
+
                 s = zero(Num)
                 for j in 2:numberFunctionsOriginal
-                    s += b_to_give[seg, j, slot]
+                    s += b_basis_support.data[seg_local, j, slot]
                 end
-                b_to_give[seg, 1, slot] = simplify_expr(1 - s)
+                b_basis_support.data[seg_local, 1, slot] = simplify_expr(1 - s)
             end
 
             for seg in right_support
+                seg_local = local_segment_index(seg, rangeSegments)
+                isnothing(seg_local) && continue
+
                 s = zero(Num)
                 for j in 1:numberFunctionsOriginal-1
-                    s += b_to_give[seg, j, slot]
+                    s += b_basis_support.data[seg_local, j, slot]
                 end
-                b_to_give[seg, end, slot] = simplify_expr(1 - s)
+                b_basis_support.data[seg_local, end, slot] = simplify_expr(1 - s)
             end
-
-
-            for pp in 0:1:p
-                if pp == 0
-                    b_deriv_to_give[:,1,pp+1,slot] = b_to_give[:,1,slot]
-                    b_deriv_to_give[:,end,pp+1,slot] = b_to_give[:,end,slot]
-                else
-                    b_deriv_to_give[:,1,pp+1,slot] = mySimplify.(∂x.(b_deriv_to_give[:,1,pp,slot]))
-                    b_deriv_to_give[:,end,pp+1,slot] = mySimplify.(∂x.(b_deriv_to_give[:,end,pp,slot]))
-                end
-            end
-
         end
-
-
-
-
-
-
-
     end
 
-    #b_selected = b_to_give[:, selected_positions, :]
-    b_deriv_selected = b_deriv_to_give[:, selected_positions, :, :]
+    b_full = differentiate(b_basis_full, x, maximumOrder; simplify_expr=simplify_expr)
+    b_support = differentiate(b_basis_support, x, maximumOrder; simplify_expr=simplify_expr)
 
-
+    b = CompactSymbolicFunctions(
+        segmentNodes,
+        length(selected_positions);
+        auxDims=b_support.auxDims,
+        variables=variables,
+        init=b_support.data[:, selected_positions, :, :],
+    )
 
     return (
-        #b = b_to_give,
-        #b_full = b,
-        b = b_deriv_selected,
-        b_full = b_deriv,
-        b_support = b_deriv_to_give,
-        x = x,
-        Δx = Δx,
-        allNodes = allNodes,
-        core_idx_refPoints = core_idx_refPoints,
-        coreKnots = coreKnots,
-        refKnots = refKnots,
-        boundary_mode = boundary_mode
+        b = b,
+        b_full = b_full,
+        b_support = b_support,
     )
 end
+
+function local_segment_index(seg, rangeSegments)
+    seg < first(rangeSegments) && return nothing
+    seg > last(rangeSegments) && return nothing
+    return seg - first(rangeSegments) + 1
+end
+
+function rebuild_clamped_residuals!(b, allNodes, refKnots, numberFunctions, slot, p, simplify_expr)
+    left_support = support_segment_indices(refKnots[1], refKnots[p + 2], allNodes)
+    for seg in left_support
+        s = zero(Num)
+        for idx in 2:numberFunctions
+            s += b[seg, idx, slot]
+        end
+        b[seg, 1, slot] = simplify_expr(1 - s)
+    end
+
+    right_support = support_segment_indices(refKnots[numberFunctions], refKnots[numberFunctions + p + 1], allNodes)
+    for seg in right_support
+        s = zero(Num)
+        for idx in 1:numberFunctions-1
+            s += b[seg, idx, slot]
+        end
+        b[seg, numberFunctions, slot] = simplify_expr(1 - s)
+    end
+
+    return b
+end
+
 
 
 
@@ -351,39 +386,8 @@ function evaluate_bspline_piecewise_deriv(b_deriv, idx, derivSlot, orderSlot, ξ
 end
 
 
-function plot_bspline_family_à_jeter(
-    result;
-    order =0,
-    derivOrder=0,
-    N=10,
-    Δxval=1.0,
-    show_full=false,
-)
-
-    arr = show_full ? result.b_full : result.b
-    ylabel_text = derivOrder == 0 ? "B-spline value" : "Derivative order $derivOrder"
-
-    allNodes = result.allNodes
-    x = result.x
-    Δx = result.Δx
-
-    orderSlot = order + 2
-    derivSlot = derivOrder + 1
-
-    ξgrid = segment_grid(allNodes; N=N)
-
-    fig = Figure(size=(900, 500))
-    ax = Axis(fig[1, 1], xlabel="x / Δx", ylabel=ylabel_text)
-
-    for idx in 1:size(arr, 2)
-        vals = [
-            evaluate_bspline_piecewise_deriv(arr, idx, derivSlot, orderSlot, ξ, allNodes, x, Δx; Δxval=Δxval)
-            for ξ in ξgrid
-        ]
-        lines!(ax, ξgrid, vals, label="B_$idx")
-    end
-
-    vlines!(ax, allNodes; color=:gray70, linestyle=:dash)
-    axislegend(ax)
-    return fig
+function plotBSpline(csf::CompactSymbolicFunctions;order=0,derivOrder=0,N=10, Δxval=1.0) 
+    slots=(derivOrder+1,order+1,)
+    ylabel="Derivative order $derivOrder"
+    return plotCompactSymbolicFunctions(csf, slots::NTuple; N=N, Δxval=Δxval,ylabel=ylabel)
 end
