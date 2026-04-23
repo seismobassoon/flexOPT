@@ -196,8 +196,24 @@ function check_compatible(a::CompactSymbolicFunctions, b::CompactSymbolicFunctio
     same_vector(a.variables, b.variables) || error("variables mismatch")
 end
 
+function Base.getindex(a::CompactSymbolicFunctions{N}, inds...) where {N}
+    naux = length(a.auxDims)
+    length(inds) == naux || error("expected $naux auxiliary indices, got $(length(inds))")
 
-Base.getindex(a::CompactSymbolicFunctions, I...) = a.data[I...]
+    newdata = a.data[:, :, inds...]
+    newAuxDims = Tuple(size(newdata)[3:end])
+
+    return CompactSymbolicFunctions(
+        a.nodes,
+        a.numberFunctions;
+        auxDims=newAuxDims,
+        variables=a.variables,
+        init=newdata,
+    )
+end
+
+
+#Base.getindex(a::CompactSymbolicFunctions, I...) = a.data[I...]
 Base.size(a::CompactSymbolicFunctions) = size(a.data)
 
 

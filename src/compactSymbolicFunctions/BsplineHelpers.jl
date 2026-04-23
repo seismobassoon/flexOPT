@@ -386,7 +386,7 @@ function evaluate_bspline_piecewise_deriv(b_deriv, idx, derivSlot, orderSlot, ξ
 end
 
 
-function plotBSpline(csf::CompactSymbolicFunctions;order=0,derivOrder=0,N=10, Δxval=1.0) 
+function plotBSpline(csf::CompactSymbolicFunctions;derivOrder=0,order=0,N=10, Δxval=1.0) 
     slots=(derivOrder+1,order+1,)
     ylabel="Derivative order $derivOrder"
     return plotCompactSymbolicFunctions(csf, slots::NTuple; N=N, Δxval=Δxval,ylabel=ylabel)
