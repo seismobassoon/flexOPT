@@ -221,7 +221,7 @@ function constructBsplineFamily(params; simplify_expr=mySimplify, boundary_mode=
         core_idx_refPoints = core_idx_refPoints,
         coreKnots = coreKnots,
         refKnots = refKnots,
-        boundary_mode = boundary_mode,
+        boundary_mode = boundary_mode
     )
 end
 
@@ -342,7 +342,16 @@ function segment_grid(allNodes; N=10)
     end
     return ξgrid
 end
-function plot_bspline_family(
+
+function evaluate_bspline_piecewise_deriv(b_deriv, idx, derivSlot, orderSlot, ξ, allNodes, x, Δx; Δxval=1.0)
+    segment = find_segment(ξ, allNodes)
+    expr = b_deriv[segment, idx, derivSlot, orderSlot]
+    value = Symbolics.substitute(expr, Dict(x => ξ * Δxval, Δx => Δxval))
+    return Symbolics.value(value)
+end
+
+
+function plot_bspline_family_à_jeter(
     result;
     order =0,
     derivOrder=0,
@@ -378,11 +387,3 @@ function plot_bspline_family(
     axislegend(ax)
     return fig
 end
-
-function evaluate_bspline_piecewise_deriv(b_deriv, idx, derivSlot, orderSlot, ξ, allNodes, x, Δx; Δxval=1.0)
-    segment = find_segment(ξ, allNodes)
-    expr = b_deriv[segment, idx, derivSlot, orderSlot]
-    value = Symbolics.substitute(expr, Dict(x => ξ * Δxval, Δx => Δxval))
-    return Symbolics.value(value)
-end
-
