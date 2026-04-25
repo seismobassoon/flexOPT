@@ -38,6 +38,34 @@ function constructTaylorExpansions(params;simplify_expr=mySimplify,)
     return (k=taylorKernel,)
 end
 
+
+function continuousAntiDerivativesMaker!(csf::CompactSymbolicFunctions)
+    allNodes = Symbolics.value.(csf.nodes)
+    numberNodes = csf.numberNodes
+    x = csf.variables[1]
+    Δx = csf.variables[2]
+    allNodesNumeric = Δx .* allNodes
+    allSlots = (csf.auxDims)
+    for iSlot in CartesianIndices(allSlots)
+        slots = Tuple(iSlot)
+        for iFunction in 1:csf.numberFunctions
+            tmpAntiDerivative=csf.data[:,iFunction,slots...]
+            shiftValue = 0
+            for iSegment in 1:numberNodes-1
+                expr = tmpAntiDerivative[iSegment]
+                xLeft = allNodesNumeric[iSegment]
+                xRight = allNodesNumeric[iSegment+1]
+                leftValue = Symbolics.value(Symbolics.substitute(expr, Dict(x => xLeft)))
+                rightValue = Symbolics.value(Symbolics.substitute(expr, Dict(x => xRight)))
+                shiftValue -= leftValue
+                csf.data[iSegment,iFunction,slots...] = expr + shiftValue
+                shiftValue += rightValue
+            end
+        end
+    end
+    return
+end
+
 function plotTaylorExpansions(csf::CompactSymbolicFunctions;l_n=0,N=10, Δxval=1.0) 
     slots=(l_n+1,)
     ylabel="Taylor expansion of the degree of $l_n"
