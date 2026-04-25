@@ -96,7 +96,7 @@ function integrateTaylorPolynomials(eq, x; simplify_expr=mySimplify)
         neweq += c * x^(i + 1) / (i + 1)
     end
 
-    return simplify_expr(neweq / den)
+    return neweq / den
 end
 
 

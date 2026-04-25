@@ -140,7 +140,7 @@ function differentiate(a::CompactSymbolicFunctions, var, maxIter; simplify_expr=
 end
 
 
-function integrate(a::CompactSymbolicFunctions, var, maxIter; simplify_expr=identity)
+function integrate(a::CompactSymbolicFunctions, var, maxIter; simplify_expr=mySimplify)
     newAuxDims = (maxIter + 1, a.auxDims...)
     newCSF = CompactSymbolicFunctions(
         a.nodes,
