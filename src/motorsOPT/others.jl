@@ -453,7 +453,7 @@ function _investigateDependencies(::Val{N},
 
         for I in CartesianIndices(tmpμCoordinates)
             idx = SVector{N}(Tuple(I))   # 🔥 correct use of SVector
-            tmpμCoordinates[I] = offsetsμUsed .+ (idx .- 1.0) .* tmpΔμ
+            tmpμCoordinates[I] = 1.0 .+ offsetsμUsed .+ (idx .- 1.0) .* tmpΔμ
         end
 
         push!(availableμPoints, tmpμCoordinates)
