@@ -223,16 +223,7 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     invaa= myInv(aa)
     tmpCˡηlocal=invaa*transpose(tmpTaylorExpansionCoeffs)
 
-
-    Cˡηlocal = Array{Any,2}(undef,numberOfEtas,numberOfLs)
-
-    Cˡηlocal .= 0
-
-    for j in eachindex(tmpPointsIndices)
-        Cˡηlocal[linearIndicesUsed[j],:] = tmpCˡηlocal[j,:]
-    end
-
-    return Cˡηlocal
+    return tmpCˡηlocal
 end
 
 function numbersOfTheExpression(equationCharacteristics,
