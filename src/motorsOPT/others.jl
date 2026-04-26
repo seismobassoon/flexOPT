@@ -414,6 +414,7 @@ function _investigateDependencies(::Val{N},
 
     availablePointsConfigurations = Vector{Any}()
     availableμPoints = Vector{Any}()
+    availableμaxes = Vector{Any}()
     centrePointConfigurations = Int[]
 
 
@@ -451,12 +452,17 @@ function _investigateDependencies(::Val{N},
             end
         end
 
+        μaxes = ntuple(d -> begin
+            [1.0 + offsetsμUsed[d] + (j - 1) * tmpΔμ[d] for j in 1:size(tmpμCoordinates, d)]
+        end, N)
+
         for I in CartesianIndices(tmpμCoordinates)
-            idx = SVector{N}(Tuple(I))   # 🔥 correct use of SVector
-            tmpμCoordinates[I] = 1.0 .+ offsetsμUsed .+ (idx .- 1.0) .* tmpΔμ
+            tmpμCoordinates[I] = SVector{N}(ntuple(d -> μaxes[d][I[d]], N))
         end
 
+
         push!(availableμPoints, tmpμCoordinates)
+        push!(availableμaxes,μaxes)
     end
 
     # ---------------- Outputs ----------------
@@ -480,7 +486,8 @@ function _investigateDependencies(::Val{N},
         multiOrdersIndices = multiOrdersIndices, # we still need this since available points can differ
         availablePointsConfigurations = availablePointsConfigurations,
         centrePointConfigurations = centrePointConfigurations,
-        availableμPoints = availableμPoints
+        availableμPoints = availableμPoints,
+        availableμaxes = availableμaxes,
     )
 
     return dependencies, ordersForSplines, configsTaylor

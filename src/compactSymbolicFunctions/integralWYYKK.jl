@@ -5,9 +5,9 @@ using .commonBatchs, UnPack, Symbolics
 
 function WYYKKIntegralNumerical(params)
     
-    @unpack orderBspline1D, YorderBspline1D, μᶜs, μs, nodesFromOne, ν, l_n_max, lᶜ_nᶜ_max, Δ = params
+    @unpack orderBspline1D, YorderBspline1D, μᶜs, μs, maxNode, ν, lᶜ_nᶜ_max, l_n_max, Δ = params
 
-    paramsForSymbolic = @strdict orderBspline1D YorderBspline1D μᶜs μs nodesFromOne[end] ν lᶜ_nᶜ_max l_n_max
+    paramsForSymbolic = @strdict orderBspline1D YorderBspline1D μᶜs μs maxNode ν lᶜ_nᶜ_max l_n_max
 
     output = myProduceOrLoad(WYYKKIntegralPureSymbolic,paramsForSymbolic,"WYYKKIntegralSymbolic")
 
@@ -72,7 +72,7 @@ function WYYKKIntegralPureSymbolic(params::Dict)
 
     # for B-spline
 
-    paramsBSν  = (maximumOrder=orderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_nodesFromOne, idx_selectedPoints = idx_ν)
+    @show paramsBSν  = (maximumOrder=orderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_nodesFromOne, idx_selectedPoints = idx_ν)
     paramsBSμᶜ = (maximumOrder=YorderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μᶜs)
     paramsBSμ  = (maximumOrder=YorderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μs)
     # idx_nodesNum : an ordinary consecutive integer increment from 1 (the numerical nodes with Δy)

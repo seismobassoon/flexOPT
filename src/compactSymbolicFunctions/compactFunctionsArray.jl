@@ -26,7 +26,7 @@ function CompactSymbolicFunctions(
     N = length(auxDims)
     dims = (length(nodes), numberFunctions, auxDims...)
     data = isnothing(init) ? zeros(Num, dims) : collect(init)
-
+    @show size(data)
     #ndims(data) == 2 + N || error("data must have $(2+N) dimensions")
     size(data) == dims || error("data must have size $dims")
 

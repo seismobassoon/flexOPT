@@ -34,6 +34,7 @@ function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:g
         error("idx_selectedPoints should be a subset of idx_refPoints_original")
 
     selected_positions = Int.(indexin(idx_selectedPoints, idx_refPoints_original))
+    selected_positions = collect(selected_positions)
 
     @variables x Δx
     variables = Num[x, Δx]
@@ -44,30 +45,28 @@ function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:g
 
     # Special case: only p = -1 indicator family.
     if maximumOrder == -1
-        b_basis_full = CompactSymbolicFunctions(
+        b_full = CompactSymbolicFunctions(
             allNodes,
             numberFunctionsOriginal;
             auxDims=(1,),
             variables=variables,
         )
-        b_basis_support = CompactSymbolicFunctions(
+        b_support = CompactSymbolicFunctions(
             segmentNodes,
             numberFunctionsOriginal;
             auxDims=(1,),
             variables=variables,
         )
 
-        b_basis_full.data[rangeSegments, :, 1] .= 1
-        b_basis_support.data[:, :, 1] .= 1
+        b_full.data[rangeSegments, :, 1] .= 1
+        b_support.data[:, :, 1] .= 1
 
-        b_full = differentiate(b_basis_full, x, 0; simplify_expr=simplify_expr)
-        b_support = differentiate(b_basis_support, x, 0; simplify_expr=simplify_expr)
         b = CompactSymbolicFunctions(
             segmentNodes,
             length(selected_positions);
-            auxDims=b_support.auxDims,
+            auxDims=(1,),
             variables=variables,
-            init=b_support.data[:, selected_positions, :, :],
+            init=b_support.data[:, selected_positions, :],
         )
 
         return (
