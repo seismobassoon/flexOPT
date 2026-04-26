@@ -72,7 +72,7 @@ function WYYKKIntegralPureSymbolic(params::Dict)
 
     # for B-spline
 
-    @show paramsBSν  = (maximumOrder=orderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_nodesFromOne, idx_selectedPoints = idx_ν)
+    paramsBSν  = (maximumOrder=orderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_nodesFromOne, idx_selectedPoints = idx_ν)
     paramsBSμᶜ = (maximumOrder=YorderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μᶜs)
     paramsBSμ  = (maximumOrder=YorderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μs)
     # idx_nodesNum : an ordinary consecutive integer increment from 1 (the numerical nodes with Δy)
@@ -115,6 +115,5 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     end
 
     WYYKK_integral = integrate(WYYKK,x)
-    output = (WYYKK_integral=WYYKK_integral)
-    return @strdict output
+    return @strdict(WYYKK_integral=WYYKK_integral)
 end

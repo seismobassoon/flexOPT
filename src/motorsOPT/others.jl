@@ -158,30 +158,23 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     # the user might want to have a look on illposedTaylorCoefficientsInversion_legend, which is deprecated as of 10/06/2025.
 
+    # as of 26/04/2026, it can compute for an arbitrary μPoints
 
     # based on the equation 27 (of the version 10/06/2025 FD2025 : \psi_{;\mu,\nu}^{(l)}[\nu+\mu]=\sum_\eta C_{\mu+\eta;\mu,\nu}^{(l)} \psi[\nu+\mu+\eta]), we need to perform this inversion anyways for all the point \mu inside L(\nu) (the concerned points for \nu)
 
 
     # be careful that pointsIndices is now a 1D array of integer vectors!!
 
-    @unpack coordinates,multiOrdersIndices,pointsIndices, Δ, YorderBspline, modifiedμ = coefInversionDict
+    @unpack multiOrdersIndices, pointsIndices, μpointsIndices, Δ  = coefInversionDict
 
-    Ndimension=length(coordinates)
 
-    if length(Δ) !== Ndimension
-        @error "the numerical delta increment has not the same dimension!"
-    end
-
-    #@show vcat(deep_flatten(pointsIndices))
-    #@show pointsIndices = svec2car(vcat(deep_flatten(pointsIndices)),Ndimension)
-    #pointsIndices=to_cartesian_list(pointsIndices,Ndimension)
-    pointsIndices = vec(CartesianIndex.(Tuple.(pointsIndices)))
-    μpointsIndices = pointsIndices # which can be changed 
+    @show typeof(pointsIndices)
+    
+    @show multiOrdersIndices, pointsIndices, μpointsIndices 
     
     numberOfEtas = length(pointsIndices)
     numberOfLs   = length(multiOrdersIndices)
-
-    numberOfMus = length(μpointsIndices) # which can be \mathbb{Z}/2 or something else ...
+    numberOfMus = length(μpointsIndices) 
 
     CˡηGlobal = Array{Float64,3}(undef,numberOfEtas,numberOfLs,numberOfMus)
 
@@ -189,14 +182,14 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     for μ_oneD in axes(CˡηGlobal,3)
         #@show typeof(multiOrdersIndices),typeof(pointsIndices)
-        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD,YorderBspline,modifiedμ)
+        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD)
     end 
 
     return @strdict(CˡηGlobal)
 
 end
 
-function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD,YorderBspline,modifiedμ)
+function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD)
 
 
     # the old version is : illposedTaylorCoefficientsInversionSingleCentre
@@ -206,18 +199,12 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     
     # for this pointsIndices are filtered for every μ
     
-    Ndimension = length(YorderBspline)
+    Ndimension = length(Δ)
 
     tmpPointsIndices = []
     linearIndicesUsed = []
 
-    #modifiedμ_vector = Array{Float64,1}(undef,Ndimension)
-
-  
-
     modifiedμ_vector = Float64.(car2svec(μpointsIndices[μ_oneD]))
-
-
    
     #for η_μ in pointsIndices
     for i in eachindex(pointsIndices)
@@ -270,7 +257,7 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
         end
     end
 
-    # here we do the famous inversion (ttttttt) even though this code is essentially a forward problem
+    # here we do the famous ill-posed inversion (ttttttt) 
     
     aa=transpose(tmpTaylorExpansionCoeffs)*tmpTaylorExpansionCoeffs
     aa=Num2Float64.(aa)
