@@ -182,14 +182,14 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     for μ_oneD in axes(CˡηGlobal,3)
         #@show typeof(multiOrdersIndices),typeof(pointsIndices)
-        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD)
+        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μpointsIndices[μ_oneD])
     end 
 
     return @strdict(CˡηGlobal)
 
 end
 
-function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,μpointsIndices,Δ,μ_oneD)
+function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μPoint)
 
 
     # the old version is : illposedTaylorCoefficientsInversionSingleCentre
@@ -198,53 +198,12 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     # with Y_μ
     
     # for this pointsIndices are filtered for every μ
-    
-    Ndimension = length(Δ)
 
-    tmpPointsIndices = []
-    linearIndicesUsed = []
+    tmpTaylorExpansionCoeffs = Array{Any,2}(undef,numberOfLs,numberOfEtas)
 
-    modifiedμ_vector = Float64.(car2svec(μpointsIndices[μ_oneD]))
-   
-    #for η_μ in pointsIndices
-    for i in eachindex(pointsIndices)
-        η_μ = pointsIndices[i]
-        iSayWeSayGo = 1
-        for iCoord in 1:Ndimension # Ndimension
-            #@show 1,μ_oneD,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1, iCoord
-            #tmp1=Num2Float64(modifiedμ[iCoord][1,μ,YorderBspline[iCoord]+1])
-            #tmp2=Num2Float64(modifiedμ[iCoord][2,μ,YorderBspline[iCoord]+1])
-            #tmp3=Num2Float64(modifiedμ[iCoord][3,μ,YorderBspline[iCoord]+1])
-            
-            tmp1=Num2Float64(safeget(modifiedμ[iCoord],1,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1))
-            tmp2=Num2Float64(safeget(modifiedμ[iCoord],2,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1))
-            tmp3=Num2Float64(safeget(modifiedμ[iCoord],3,μpointsIndices[μ_oneD][iCoord],YorderBspline[iCoord]+1))
-            #@show tmp1, tmp2, tmp3
-
-            #modifiedμ_vector[iCoord] = tmp3
-            if YorderBspline[iCoord] === -1 # this will use Y everywhere (for ν+μ = ν)
-                iSayWeSayGo *= 1
-            elseif  tmp1 <=η_μ[iCoord] <= tmp2
-                iSayWeSayGo *= 1
-            else
-                iSayWeSayGo *= 0
-            end
-        end
-        if iSayWeSayGo === 1
-            tmpPointsIndices=push!(tmpPointsIndices,η_μ)
-            linearIndicesUsed=push!(linearIndicesUsed,i)
-        end
-    end
-
-    tmpNumberOfEtas = length(tmpPointsIndices)
-    tmpTaylorExpansionCoeffs = Array{Any,2}(undef,numberOfLs,tmpNumberOfEtas)
-
-
-    for iAvailablePoint in eachindex(tmpPointsIndices)
-        η_μ = tmpPointsIndices[iAvailablePoint]
-        #η = tmpPointsIndices[i]-pointsIndices[μ]
-        #η = tmpPointsIndices[i] - modifiedμ_vector
-        η = Float64.(car2svec(η_μ)) .- modifiedμ_vector 
+    for iAvailablePoint in eachindex(pointsIndices)
+        η_μ = pointsIndices[iAvailablePoint]
+        η = Float64.(η_μ) .- μPoint
         distances= η .* Δ
         for j in multiOrdersIndices
             linearJ = LinearIndices(multiOrdersIndices)[j]
@@ -253,7 +212,6 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
             denominator=prod(factorial.(orders))
             tmpTaylorCoeffs = numerator/denominator
             tmpTaylorExpansionCoeffs[linearJ,iAvailablePoint]=tmpTaylorCoeffs 
-
         end
     end
 
