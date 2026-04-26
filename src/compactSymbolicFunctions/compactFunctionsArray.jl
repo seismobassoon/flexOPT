@@ -179,7 +179,7 @@ function integrate(a::CompactSymbolicFunctions, var; simplify_expr=mySimplify)
         auxDims=a.auxDims,
         variables=a.variables,
         #init=simplify_expr.(Symbolics.integrate.(a.data, Ref(var))),
-        init=simplify_expr.(integrateTaylorPolynomials.(a.data, Ref(var)))
+        init=integrateTaylorPolynomials.(a.data, Ref(var))
     )
 end
 

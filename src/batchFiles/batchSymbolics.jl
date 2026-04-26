@@ -66,7 +66,7 @@ function mySimplify(eq)
     #@time neweq=simplify_fractions.(neweq)
     #@time neweq=simplify.(eq;expand=true,threaded=false,simplify_fractions=true)
     neweq=expand.(eq)
-    neweq=simplify_fractions.(neweq)
+    #neweq=simplify_fractions.(neweq)
     neweq = expand_derivatives.(neweq)
     #print("mySimplify ended\n")
     
