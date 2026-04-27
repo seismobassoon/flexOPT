@@ -400,6 +400,10 @@ function _investigateDependencies(::Val{N},
         push!(availableμPoints, tmpμCoordinates)
         push!(availableμaxes,μaxes)
     end
+    
+    # here we use the same bases for fields and materials
+    availableμᶜPoints=availableμPoints
+    availableμᶜaxes=availableμaxes
 
     # ---------------- Outputs ----------------
 
@@ -424,6 +428,8 @@ function _investigateDependencies(::Val{N},
         centrePointConfigurations = centrePointConfigurations,
         availableμPoints = availableμPoints,
         availableμaxes = availableμaxes,
+        availableμᶜPoints = availableμᶜPoints,
+        availableμᶜaxes = availableμᶜaxes,
     )
 
     return dependencies, ordersForSplines, configsTaylor
