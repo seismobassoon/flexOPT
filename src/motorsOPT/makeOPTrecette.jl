@@ -78,7 +78,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     
     # look at the debug1DKernelIntegral.ipynb    
     
-    coefWYYKK = Array{Any,1}(undef,nCoordinates.val) # Array of (l_n_max+1,lᶜ_nᶜ_max+1,length(μs),length(μᶜs),length(ν) ) times nCoordinates
+    coefWYYKK = Array{Any,1}(undef,nCoordinates) # Array of (l_n_max+1,lᶜ_nᶜ_max+1,length(μs),length(μᶜs),length(ν) ) times nCoordinates
     for iCoord ∈ 1:nCoordinates
         maxNodes = pointsIndices[end][iCoord]
         nodesFromOne = [1,2,3] # ∈ Z like [1,2,3], an array of integers collect(1:1:Npoints) (nothing else!!)
