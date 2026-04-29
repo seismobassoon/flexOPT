@@ -298,8 +298,9 @@ function investigateDependencies(equationCharacteristics,
                                  numbersOfTheSystem,
                                  trialFunctionsCharacteristics,
                                  TaylorOptionsμ,TaylorOptionsμᶜ)
-    dependencies,ordersForSplines,configsTaylorμ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ)
-    _,_,configsTaylorμᶜ= investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμᶜ)
+    dependencies,ordersForSplinesμ,configsTaylorμ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ)
+    _,ordersForSplinesμᶜ,configsTaylorμᶜ= investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμᶜ)
+    return dependencies,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ
 end
 
 
@@ -460,8 +461,6 @@ function _investigateDependencies(::Val{N},
         centrePointConfigurations = centrePointConfigurations,
         availableμPoints = availableμPoints,
         availableμaxes = availableμaxes,
-        availableμᶜPoints = availableμᶜPoints,
-        availableμᶜaxes = availableμᶜaxes,
     )
 
     return dependencies, ordersForSplines, configsTaylor

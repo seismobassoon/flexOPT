@@ -3,11 +3,11 @@
 using .commonBatchs, UnPack, Symbolics
 
 
-function WYYKKIntegralNumerical(params)
+function WYYKKIntegralNumerical(params;ImakeReport=true)
     
-    @unpack orderBspline1D, YorderBspline1D, μᶜs, μs, maxNode, ν, lᶜ_nᶜ_max, l_n_max, Δ = params
+    @unpack orderBspline1D, YorderBspline1Dμᶜ, YorderBspline1Dμ, μᶜs, μs, maxNode, ν, lᶜ_nᶜ_max, l_n_max, Δ = params
 
-    paramsForSymbolic = @strdict orderBspline1D YorderBspline1D μᶜs μs maxNode ν lᶜ_nᶜ_max l_n_max
+    paramsForSymbolic = @strdict orderBspline1D YorderBspline1Dμᶜ YorderBspline1Dμ μᶜs μs maxNode ν lᶜ_nᶜ_max l_n_max ImakeReport
 
     output = myProduceOrLoad(WYYKKIntegralPureSymbolic,paramsForSymbolic,"WYYKKIntegralSymbolic")
 
@@ -51,7 +51,7 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     # Cˡη;μ are computed for a specific geometry, so even though the boundary condition reduces
     # the number of available points, each Taylor expansion for K_{l-n}(y-y_μ) should be Ok
 
-    @unpack orderBspline1D,YorderBspline1D,μᶜs,μs,maxNode,ν,lᶜ_nᶜ_max,l_n_max = params
+    @unpack orderBspline1D,YorderBspline1Dμᶜ,YorderBspline1Dμ,μᶜs,μs,maxNode,ν,lᶜ_nᶜ_max,l_n_max,ImakeReport = params
 
     nodesFromOne = collect(1:1:maxNode) # ∈ Z like [1,2,3], an array of integers collect(1:1:N) (nothing else!!)
 
@@ -73,8 +73,8 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     # for B-spline
 
     paramsBSν  = (maximumOrder=orderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_nodesFromOne, idx_selectedPoints = idx_ν)
-    paramsBSμᶜ = (maximumOrder=YorderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μᶜs)
-    paramsBSμ  = (maximumOrder=YorderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μs)
+    paramsBSμᶜ = (maximumOrder=YorderBspline1Dμᶜ, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μᶜs)
+    paramsBSμ  = (maximumOrder=YorderBspline1Dμ, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μs)
     # idx_nodesNum : an ordinary consecutive integer increment from 1 (the numerical nodes with Δy)
     # idx_refPoints_original : supporting nodes to construct the Bspline family
     # idx_selectedPoints  : the node addresses that user needs to take, should be a subset of idx_refPoints_original
