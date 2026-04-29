@@ -115,5 +115,132 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     end
 
     WYYKK_integral = integrate(WYYKK,x)
-    return @strdict(WYYKK_integral=WYYKK_integral)
+
+    reportDir = nothing
+
+    if ImakeReport
+        
+        reportDir = joinpath(pwd(), "WYYKKIntegralPureSymbolic_report")
+        mkpath(reportDir)
+
+        # Page 1: B-spline families
+        save_bspline_report_plot(
+            joinpath(reportDir, "01_Wnu.pdf"),
+            Wν.b;
+            derivOrder=0,
+            order=max(orderBspline1D, 0),
+            N=80,
+            title="Wν",
+        )
+
+        save_bspline_report_plot(
+            joinpath(reportDir, "02_Ymuc.pdf"),
+            Yμᶜ.b;
+            derivOrder=0,
+            order=max(YorderBspline1Dμᶜ, 0),
+            N=80,
+            title="Yμᶜ",
+        )
+
+        save_bspline_report_plot(
+            joinpath(reportDir, "03_Ymu.pdf"),
+            Yμ.b;
+            derivOrder=0,
+            order=max(YorderBspline1Dμ, 0),
+            N=80,
+            title="Yμ",
+        )
+
+        # Kμᶜ pages
+        for iμᶜ in eachindex(μᶜs), lᶜ_nᶜ in 0:lᶜ_nᶜ_max
+            lᶜ_nᶜ_slot = lᶜ_nᶜ + 1
+            save_report_plot(
+                joinpath(reportDir, "10_Kmuc_i$(iμᶜ)_l$(lᶜ_nᶜ).pdf"),
+                Kμᶜ.k,
+                (lᶜ_nᶜ_slot,);
+                N=80,
+                title="Kμᶜ, iμᶜ=$iμᶜ, lᶜ-nᶜ=$lᶜ_nᶜ",
+                ylabel="Taylor kernel",
+            )
+        end
+
+        # Kμ pages
+        for iμ in eachindex(μs), l_n in 0:l_n_max
+            l_n_slot = l_n + 1
+            save_report_plot(
+                joinpath(reportDir, "20_Kmu_i$(iμ)_l$(l_n).pdf"),
+                Kμ.k,
+                (l_n_slot,);
+                N=80,
+                title="Kμ, iμ=$iμ, l-n=$l_n",
+                ylabel="Taylor kernel",
+            )
+        end
+
+        # WYYKK pages
+        for iν in eachindex(ν), iμᶜ in eachindex(μᶜs), iμ in eachindex(μs), lᶜ_nᶜ in 0:lᶜ_nᶜ_max, l_n in 0:l_n_max
+            l_n_slot = l_n + 1
+            lᶜ_nᶜ_slot = lᶜ_nᶜ + 1
+
+            save_report_plot(
+                joinpath(reportDir, "30_WYYKK_inu$(iν)_imuc$(iμᶜ)_imu$(iμ)_lc$(lᶜ_nᶜ)_l$(l_n).pdf"),
+                WYYKK,
+                (l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ, iν);
+                N=80,
+                title="WYYKK, iν=$iν, iμᶜ=$iμᶜ, iμ=$iμ, lᶜ-nᶜ=$lᶜ_nᶜ, l-n=$l_n",
+                ylabel="integrand",
+            )
+        end
+
+        # WYYKK_integral pages
+        for iν in eachindex(ν), iμᶜ in eachindex(μᶜs), iμ in eachindex(μs), lᶜ_nᶜ in 0:lᶜ_nᶜ_max, l_n in 0:l_n_max
+            l_n_slot = l_n + 1
+            lᶜ_nᶜ_slot = lᶜ_nᶜ + 1
+
+            save_report_plot(
+                joinpath(reportDir, "40_WYYKK_integral_inu$(iν)_imuc$(iμᶜ)_imu$(iμ)_lc$(lᶜ_nᶜ)_l$(l_n).pdf"),
+                WYYKK_integral,
+                (l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ, iν);
+                N=80,
+                title="∫WYYKK, iν=$iν, iμᶜ=$iμᶜ, iμ=$iμ, lᶜ-nᶜ=$lᶜ_nᶜ, l-n=$l_n",
+                ylabel="integral",
+            )
+        end
+    end
+
+    
+    return @strdict(WYYKK_integral=WYYKK_integral, reportDir=reportDir)
+
 end
+
+
+function save_report_plot(
+    filepath::AbstractString,
+    csf::CompactSymbolicFunctions,
+    slots::NTuple;
+    N=80,
+    Δxval=1.0,
+    title="",
+    ylabel="value",
+)
+    fig = plotCompactSymbolicFunctions(csf, slots; N=N, Δxval=Δxval, ylabel=ylabel)
+    ax = content(fig[1, 1])
+    ax.title = title
+    save(filepath, fig)
+    return filepath
+end
+
+function save_bspline_report_plot(
+    filepath::AbstractString,
+    csf::CompactSymbolicFunctions;
+    derivOrder=0,
+    order=0,
+    N=80,
+    Δxval=1.0,
+    title="",
+)
+    slots = (derivOrder + 1, order + 1)
+    ylabel = derivOrder == 0 ? "B-spline value" : "Derivative order $derivOrder"
+    return save_report_plot(filepath, csf, slots; N=N, Δxval=Δxval, title=title, ylabel=ylabel)
+end
+
