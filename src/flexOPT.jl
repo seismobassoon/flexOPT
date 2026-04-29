@@ -12,8 +12,8 @@ module flexOPT
     # wrapping functions
 
     include("../src/motorsOPT/makeOPTrecette.jl")
-    export TaylorOptions
-
+    export TaylorOptions,makeOPTsemiSymbolic
+    
     # deriving symbolic and semi-symbolic OPT operators
     include("../src/compactSymbolicFunctions/compactFunctionsArray.jl")
     include("../src/compactSymbolicFunctions/BsplineHelpers.jl")

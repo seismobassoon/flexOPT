@@ -8,7 +8,7 @@ end
 
 function makeOPTsemiSymbolic(params::Dict)
     @unpack famousEquationType, Δ, orderBtime, orderBspace, pointsInSpace, pointsInTime, supplementaryOrder, fieldItpl, materItpl = params
-
+    Δnum = SVector(Δ)
     # construction of NamedTuples
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
 
@@ -19,18 +19,18 @@ function makeOPTsemiSymbolic(params::Dict)
     equationCharacteristics=famousEquations(famousEquationType)
     numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplines)
+    bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
 
-
+    constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
 
 end
 
 
-function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,Δnum)
-    return constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμ,configsTaylorμ,Δnum)
+function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM)
+    return constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM)
 end
 
-function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum;ImakeReport=true)
+function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true)
     
     # for the future develpments: ν can move but it's already more or less coded! look at pointν and nGeometry
 
@@ -40,12 +40,12 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     @unpack fields,vars = equationCharacteristics
     @unpack nCoordinates,NtypeofExpr,NtypeofExpr,NtypeofFields = numbersOfTheSystem
     @unpack multiOrdersIndices,availablePointsConfigurations,centrePointConfigurations,availableμPoints,availableμaxes, numberGeometries = configsTaylorμ
-    availableμᶜPoints = configsTaylorμᶜ.availableμ
-    availableμᶜaxes = configsTaylorμᶜ.avaiableμaxes
+    availableμᶜPoints = configsTaylorμᶜ.availableμPoints
+    availableμᶜaxes = configsTaylorμᶜ.availableμaxes
     orderBspline = ordersForSplinesμ
     YorderBsplineμ = ordersForSplinesμ.YorderBspline
     YorderBsplineμᶜ= ordersForSplinesμᶜ.YorderBspline
-
+    nCoordinates = nCoordinates isa Val ? nCoordinates.val : nCoordinates
 
     #for iConfigGeometry ∈ 1:numberGeometries
     nGeometry = numberGeometries
@@ -78,7 +78,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     
     # look at the debug1DKernelIntegral.ipynb    
     
-    coefWYYKK = Array{Any,1}(undef,nCoordinates) # Array of (l_n_max+1,lᶜ_nᶜ_max+1,length(μs),length(μᶜs),length(ν) ) times nCoordinates
+    coefWYYKK = Array{Any,1}(undef,nCoordinates.val) # Array of (l_n_max+1,lᶜ_nᶜ_max+1,length(μs),length(μᶜs),length(ν) ) times nCoordinates
     for iCoord ∈ 1:nCoordinates
         maxNodes = pointsIndices[end][iCoord]
         nodesFromOne = [1,2,3] # ∈ Z like [1,2,3], an array of integers collect(1:1:Npoints) (nothing else!!)

@@ -245,7 +245,7 @@ function numbersOfTheExpression(equationCharacteristics,
         pointsμUsed = pointsμUsed,
         offsetsμUsed = offsetsμUsed,
         pointsμᶜUsed = numbersOfTheSystem2.pointsμUsed,
-        offsetμᶜUsed = numbersOfTheSystem2.offsetμUsed,
+        offsetsμᶜUsed = numbersOfTheSystem2.offsetsμUsed,
     )
 end
 
@@ -277,9 +277,6 @@ function numbersOfTheExpression(equationCharacteristics,
         offsetsμUsed[end] = Float64(offsetμInΔyInTime)
     end
 
-    if length(Δnum) != Ndimension
-        @error "the numerical delta increment has not the same dimension!"
-    end
 
     return (
         timeMarching = timeMarching,
