@@ -85,8 +85,8 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
         ν = (pointν[iCoord]) # this should be one point (for the moment)
         lᶜ_nᶜ_max = L_MINUS_N[end][iCoord] # variable
         l_n_max = L_MINUS_N[end][iCoord] # field
-        params = (orderBspline1D=orderBspline[iCoord], YorderBspline1Dμᶜ=YorderBsplineμᶜ[iCoord], YorderBspline1Dμ=YorderBsplineμ[iCoord], μᶜs=μᶜaxes[iCoord], μs=μaxes[iCoord], maxNode = pointsIndices[end][iCoord], ν =(pointν[iCoord]), lᶜ_nᶜ_max=lᶜ_nᶜ_max, l_n_max=l_n_max,  Δ=Δnum[iCoord])
-        coefWYYKK[iCoord] = WYYKKIntegralNumerical(params;ImakeReport=ImageReport) 
+        params = (orderBspline1D=orderBspline[iCoord], YorderBspline1Dμᶜ=YorderBsplineμᶜ[iCoord], YorderBspline1Dμ=YorderBsplineμ[iCoord], μᶜs=μᶜaxes[iCoord], μs=μaxes[iCoord], maxNode = pointsIndices[end][iCoord], ν =(pointν[iCoord]), lᶜ_nᶜ_max=lᶜ_nᶜ_max, l_n_max=l_n_max,  Δ=Δnum[iCoord],ImakeReport=ImakeReport)
+        coefWYYKK[iCoord] = WYYKKIntegralNumerical(params) 
     end
 
     #endregion
