@@ -45,7 +45,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     orderBspline = ordersForSplinesμ
     YorderBsplineμ = ordersForSplinesμ.YorderBspline
     YorderBsplineμᶜ= ordersForSplinesμᶜ.YorderBspline
-    nCoordinates = nCoordinates isa Val ? nCoordinates.val : nCoordinates
+    #nCoordinates = nCoordinates isa Val ? nCoordinates.val : nCoordinates
 
     #for iConfigGeometry ∈ 1:numberGeometries
     nGeometry = numberGeometries

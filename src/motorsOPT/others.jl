@@ -239,7 +239,7 @@ function numbersOfTheExpression(equationCharacteristics,
         NtypeofExpr = NtypeofExpr,
         NtypeofMaterialVariables = NtypeofMaterialVariables,
         NtypeofFields = NtypeofFields,
-        nCoordinates = Ndimension,
+        nCoordinates = nCoordinates,
         Ndimension = Ndimension,   # 🔥 key change
         pointsUsed = pointsUsed,
         pointsμUsed = pointsμUsed,
