@@ -8,34 +8,33 @@ module flexOPT
     backend = Main.backend
     makeGPUarray = Main.makeGPUarray
 
-    # batch files
 
-    include("batchFiles/batchSymbolics.jl")
-    export x,y,z,t
-    export ∂x,∂y,∂z,∂t
-    export ∂x²,∂y²,∂z²,∂t² 
-    export Num2Float64,usefulPartials,myCoeff,mySolvefor,mySimplify,integrateTaylorPolynomials
+    # wrapping functions
+
+    include("../src/motorsOPT/makeOPTrecette.jl")
+    export TaylorOptions
+
+    # deriving symbolic and semi-symbolic OPT operators
+    include("../src/compactSymbolicFunctions/compactFunctionsArray.jl")
+    include("../src/compactSymbolicFunctions/BsplineHelpers.jl")
+    include("../src/CompactSymbolicFunctions/TaylorExpansionHelpers.jl")
+    include("../src/CompactSymbolicFunctions/integralWYYKK.jl")
 
 
-    # Semi symbolic OPT motors
-    include("motorsOPT/WYYKK.jl")
-    export getIntegralWYYKK
-    include("motorsOPT/IntegrateBsplineAndPolynomials.jl")
-    export BsplineTimesPolynomialsIntegrated
-    include("motorsOPT/others.jl")
-    #export findCartesianDependency, makeMixPartials,varMmaker,PDECoefFinder,timeDimensionString
-    export timeDimensionString
-    include("motorsOPT/OPTEngines.jl")
-    export OPTobj
+    # famous equations etc.
+
+    include("../src/motorsOPT/others.jl")
+    include("../src/motorsOPT/famousEquations.jl")
+    include("../src/motorsOPT/famousSourceFunctions.jl")
 
     # semi-symbolics operators to fully numerical operators
     #include("fullyNumericalOPT/makeCostFunctions.jl")
     include("fullyNumericalOPT/costFunctions.jl")
+
+
+
     export getModelPoints,quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
-    
-    # famous equations
-    include("motorsOPT/famousEquations.jl")
-    include("motorsOPT/famousSourceFunctions.jl")
+
     export famousEquations, Ricker
 
 end

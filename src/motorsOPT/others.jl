@@ -228,6 +228,29 @@ end
 
 function numbersOfTheExpression(equationCharacteristics,
                                trialFunctionsCharacteristics,
+                               TaylorOptions1, TaylorOptions2)
+
+    numbersOfTheSystem1=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptions1)
+    numbersOfTheSystem2=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptions2)
+    @unpack timeMarching,NtypeofExpr,NtypeofMaterialVariables,NtypeofFields,nCoordinates,Ndimension,pointsUsed,pointsμUsed,offsetsμUsed = numbersOfTheSystem1
+
+    return (
+        timeMarching = timeMarching,
+        NtypeofExpr = NtypeofExpr,
+        NtypeofMaterialVariables = NtypeofMaterialVariables,
+        NtypeofFields = NtypeofFields,
+        nCoordinates = Ndimension,
+        Ndimension = Ndimension,   # 🔥 key change
+        pointsUsed = pointsUsed,
+        pointsμUsed = pointsμUsed,
+        offsetsμUsed = offsetsμUsed,
+        pointsμᶜUsed = numbersOfTheSystem2.pointsμUsed,
+        offsetμᶜUsed = numbersOfTheSystem2.offsetμUsed,
+    )
+end
+
+function numbersOfTheExpression(equationCharacteristics,
+                               trialFunctionsCharacteristics,
                                TaylorOptions)
 
     @unpack exprs, fields, vars, coordinates = equationCharacteristics
@@ -270,6 +293,15 @@ function numbersOfTheExpression(equationCharacteristics,
         offsetsμUsed = offsetsμUsed
     )
 end
+
+function investigateDependencies(equationCharacteristics,
+                                 numbersOfTheSystem,
+                                 trialFunctionsCharacteristics,
+                                 TaylorOptionsμ,TaylorOptionsμᶜ)
+    dependencies,ordersForSplines,configsTaylorμ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ)
+    _,_,configsTaylorμᶜ= investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμᶜ)
+end
+
 
 function investigateDependencies(equationCharacteristics,
                                  numbersOfTheSystem,
