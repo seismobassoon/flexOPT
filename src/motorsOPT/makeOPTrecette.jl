@@ -42,7 +42,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     @unpack multiOrdersIndices,availablePointsConfigurations,centrePointConfigurations,availableμPoints,availableμaxes, numberGeometries = configsTaylorμ
     availableμᶜPoints = configsTaylorμᶜ.availableμPoints
     availableμᶜaxes = configsTaylorμᶜ.availableμaxes
-    orderBspline = ordersForSplinesμ
+    orderBspline = ordersForSplinesμ.orderBspline
     YorderBsplineμ = ordersForSplinesμ.YorderBspline
     YorderBsplineμᶜ= ordersForSplinesμᶜ.YorderBspline
     #nCoordinates = nCoordinates isa Val ? nCoordinates.val : nCoordinates

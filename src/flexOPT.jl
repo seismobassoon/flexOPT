@@ -3,6 +3,7 @@ module flexOPT
     using Symbolics,UnPack,Tullio
     using KernelAbstractions
     using ..commonBatchs
+    using Adapt
 
     # GPU backend (batchFiles/batchGPU.jl should be called in Main)
     backend = Main.backend

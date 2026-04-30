@@ -104,18 +104,21 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     # therefore, boxcar functions should be properly called
     # however, we need to be careful with further developments around this 
 
-    YorderSlot = maximum((YorderBspline1D + 1,1)) # for Yorder = -1 : just boxcar
+    YorderSlotμᶜ = maximum((YorderBspline1Dμᶜ + 1,1)) # for Yorder = -1 : just boxcar
+    YorderSlotμ = maximum((YorderBspline1Dμ + 1,1)) # for Yorder = -1 : just boxcar
+    
     orderSlot = maximum((orderBspline1D + 1,1)) # for order = -1 : just boxcar
     derivSlot = 1 # no derivatives
 
     for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
         l_n_slot=l_n+1
         lᶜ_nᶜ_slot = lᶜ_nᶜ+1
-        WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Wν.b.data[:,iν,derivSlot,orderSlot].*Yμᶜ.b.data[:,iμᶜ,derivSlot,YorderSlot].*Yμ.b.data[:,iμ,derivSlot,YorderSlot].*Kμᶜ.k.data[:,iμᶜ,lᶜ_nᶜ_slot].*Kμ.k.data[:,iμ,l_n_slot])
+        WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Wν.b.data[:,iν,derivSlot,orderSlot].*Yμᶜ.b.data[:,iμᶜ,derivSlot,YorderSlotμᶜ].*Yμ.b.data[:,iμ,derivSlot,YorderSlotμ].*Kμᶜ.k.data[:,iμᶜ,lᶜ_nᶜ_slot].*Kμ.k.data[:,iμ,l_n_slot])
     end
 
     WYYKK_integral = integrate(WYYKK,x)
-
+    continuousAntiDerivativesMaker!(WYYKK_integral)
+    
     reportDir = nothing
 
     if ImakeReport
