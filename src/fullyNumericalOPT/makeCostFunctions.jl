@@ -1,39 +1,6 @@
 
 function quasiNumericalOperatorConstruction(optRec)
-    timeMarching=optRec["recette"].timeMarching
-    Av=optRec["recette"].lhs.AjiννᶜU
-    varM=optRec["recette"].lhs.varM
-    Γg=optRec["recette"].rhs.ΓjiννᶜF
-    varF=optRec["recette"].rhs.varF
-    #nodes=optRec["recette"].nodes
 
-
-end
-
-function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
-
-    # if modelPoints = nothing -> models[1] will be the reference for the modelPoints (in space)
-    # if timeMarching modelPoints will get an additional dimension (>1)
-    # if !timeMarching modelPoints will get an additional dimension (=1)
-
-    #region todo list
-    #todo list
-    # 
-    # this function is tooooooo complicated! I think I can simplify very much this!
-    #
-    #
-    #  need to work on the bc, same like the masked thing (limited region of source)
-    #
-    # absorbing boundaries : I think we can already put the bc inside the numerical operators but be careful with the time marching: search for weightingCerjan
-    # 
-    # need extend to 4 points with the same test functions (3 points) -> staggered grid
-    #  
-    # I have to include some complex initial condition for 場
-    #
-    # have to write:
-    #  function illposedTaylorCoefficientsInversion(coordinates,multiOrdersIndices,multiPointsIndices,midPoint,Δ)
-    #endregion
-    
     #region general introduction
     #
     #
@@ -62,6 +29,39 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
     #
     #
     #endregion
+
+    timeMarching=optRec["recette"].timeMarching
+    Av=optRec["recette"].lhs.AjiννᶜU
+    varM=optRec["recette"].lhs.varM
+    Γg=optRec["recette"].rhs.ΓjiννᶜF
+    varF=optRec["recette"].rhs.varF
+    #nodes=optRec["recette"].nodes
+
+    @show 
+
+end
+
+function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
+
+    # if modelPoints = nothing -> models[1] will be the reference for the modelPoints (in space)
+    # if timeMarching modelPoints will get an additional dimension (>1)
+    # if !timeMarching modelPoints will get an additional dimension (=1)
+
+    #region todo list
+    #todo list
+    # 
+    # this function is tooooooo complicated! I think I can simplify very much this!
+    #
+    #
+    #  need to work on the bc, same like the masked thing (limited region of source)
+    #
+    # absorbing boundaries : I think we can already put the bc inside the numerical operators but be careful with the time marching: search for weightingCerjan
+    # 
+    # need extend to 4 points with the same test functions (3 points) -> staggered grid
+    #  
+    # I have to include some complex initial condition for 場
+    #
+    
 
     #region unpacking, N-dimensionalising all the models 
 
