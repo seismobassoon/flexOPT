@@ -33,7 +33,11 @@ function makeOPTsemiSymbolic(params::Dict)
     bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Γjiννᶜ,ΓjiννᶜF,Flocal =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     rhs=(Γjiννᶜ=Γjiννᶜ,ΓjiννᶜF=ΓjiννᶜF,Flocal=Flocal,varF=varM)
-    recette=(lhs=lhs,rhs=rhs)
+
+    #
+    nodes=configsTaylorμ.availablePointsConfigurations
+    timeMarching=numbersOfTheSystem.timeMarching
+    recette=(lhs=lhs,rhs=rhs,nodes=nodes,timeMarching=timeMarching)
     return @strdict(recette)
 
 end
