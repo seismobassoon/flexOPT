@@ -50,20 +50,7 @@ function quasiNumericalOperatorConstruction(optRec,models)
     
     Models=Array{Any,1}(undef,NtypeofMaterialVariables)
     ModelPoints=Array{Int,2}(undef,Ndimension,NtypeofMaterialVariables)
-
-    # the last coordinate should be cosidered as time ANYWAYS
-    if !timeMarching
-        Ndimension+=1
-        localPointsIndices=CartesianIndices(Tuple([car2vec(localPointsIndices[end]);1]))
-        middlepoint=CartesianIndex([car2vec(middlepoint);1]...)
-        tmpT=Symbolics.variable(timeDimensionString)
-        modelPoints = (modelPoints...,1)
-    end
-
-
     
-    
-
     for iVar ∈ 1:NtypeofMaterialVariables
         CartesianDependency=lhs.CartesianDependencies[:,iVar]
         if ndims(models[iVar]) === CartesianDependencies
@@ -75,10 +62,8 @@ function quasiNumericalOperatorConstruction(optRec,models)
             tmpModel[vec2car(ones(Int, Ndimension))] = models[iVar]
             Models[iVar]=tmpModel
         else
-            #@show models[iVar],iVar,CartesianDependency, vars[iVar]
             newCoords=expandVectors(size(models[iVar]),CartesianDependency)
             ModelPoints[:,iVar] = newCoords
- 
             tmpModel=reshape(models[iVar],newCoords...)
             Models[iVar]=tmpModel
 
@@ -89,7 +74,10 @@ function quasiNumericalOperatorConstruction(optRec,models)
             end
 
     end
-
+    
+    #endregion
+    @show Models, ModelPoints
+    
 end
 
 function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
