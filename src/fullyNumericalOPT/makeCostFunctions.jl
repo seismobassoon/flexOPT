@@ -1,5 +1,5 @@
 
-function quasiNumericalOperatorConstruction(optRec,models)
+function quasiNumericalOperatorConstruction(optRec,modelFam;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
 
     #region general introduction
     #
@@ -31,99 +31,109 @@ function quasiNumericalOperatorConstruction(optRec,models)
     #
     #endregion
 
+    @unpack models, modelName, modelPoints = modelFam
 
-    @unpack lhs, rhs, nodes, centresIndices, numbersOfTheSystem=optRec["recette"]
-    Av=lhs.AjiννᶜU
+
+    @unpack lhs, rhs, nodes, centresIndices, numbersOfTheSystem,fieldNames=optRec["recette"]
+    symA=lhs.Ajiννᶜ
     varM=lhs.varM
+    Ulocal=lhs.Ulocal
     
-    Γg=rhs.ΓjiννᶜF
+    symΓ=rhs.Γjiννᶜ
     varF=rhs.varF
+    Flocal=rhs.Flocal
 
+    @unpack fields, extfields = fieldNames
 
-
-    @unpack timeMarching,nGeometry,Ndimension,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem
+    @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
+    NtypeofExtFields=numbersOfTheSystem.numbersOfTheSystemL.NtypeofFields
+    NtypeofExtMaterialVariables=numbersOfTheSystem.numbersOfTheSystemR.NtypeofMaterialVariables
+    nConfigurations=numbersOfTheSystem.nConfigurations
     # normally the geometry configurations should be proposed in the preferred order
+    nGeometry=nConfigurations
+    Ndimension=nCoordinates
+
+    
+
+    # the last coordinate should be cosidered as time
+
+    localPointsIndices = Vector{Any}(undef, nGeometry)
+    middlepoints = Vector{Any}(undef, nGeometry)
+    lhs_CartesianDependencies = lhs.CartesianDependencies
+    rhs_CartesianDependencies = rhs.CartesianDependencies
+
+    newD=Ndimension
+
+    if !timeMarching
+        newD = Ndimension + 1
+        modelPoints = (modelPoints..., 1)
+
+        lhs_CartesianDependencies = vcat(lhs.CartesianDependencies,zeros(Int, 1, NtypeofMaterialVariables),)
+        rhs_CartesianDependencies = vcat(rhs.CartesianDependencies,zeros(Int, 1, NtypeofFields),)
+
+        for iGeometry in 1:nGeometry
+            localPointsIndices[iGeometry] = [SVector{newD,Int}(p..., 1) for p in nodes[iGeometry]]
+            selected = nodes[iGeometry][centresIndices[iGeometry]]
+            middlepoints[iGeometry] = SVector{newD,Int}(selected..., 1)
+        end
+    else
+        
+        for iGeometry in 1:nGeometry
+            localPointsIndices[iGeometry] = nodes[iGeometry]
+            selected = nodes[iGeometry][centresIndices[iGeometry]]
+            middlepoints[iGeometry] = selected
+        end
+    end
+
+
 
     if length(models) !== NtypeofMaterialVariables 
         @error "Each material has to have its own model"
     end
     
     Models=Array{Any,1}(undef,NtypeofMaterialVariables)
-    ModelPoints=Array{Int,2}(undef,Ndimension,NtypeofMaterialVariables)
+    ModelPoints = Array{Int,2}(undef, newD, NtypeofMaterialVariables)
     
     for iVar ∈ 1:NtypeofMaterialVariables
-        CartesianDependency=lhs.CartesianDependencies[:,iVar]
-        if ndims(models[iVar]) === CartesianDependencies
+        CartesianDependency=lhs_CartesianDependencies[:,iVar]
+        if ndims(models[iVar]) !== sum(CartesianDependency)
             @error "model parameter dimension is not what you declared in the equation!"
         end
         if sum(CartesianDependency) == 0 # when it is a constant
-            tmpModel=Array{Any,Ndimension}(undef,(ones(Int, Ndimension)...)...)
-            ModelPoints[:,iVar] = ones(Int, Ndimension)
-            tmpModel[vec2car(ones(Int, Ndimension))] = models[iVar]
+            tmpModel = Array{Any,newD}(undef, (ones(Int, newD)...)...)
+            ModelPoints[:, iVar] = ones(Int, newD)
+            tmpModel[vec2car(ones(Int, newD))] = models[iVar]
             Models[iVar]=tmpModel
         else
-            newCoords=expandVectors(size(models[iVar]),CartesianDependency)
-            ModelPoints[:,iVar] = newCoords
-            tmpModel=reshape(models[iVar],newCoords...)
-            Models[iVar]=tmpModel
+            @show size(models[iVar])
+            @show newCoords=expandVectors(size(models[iVar]),CartesianDependency)
+            @show ModelPoints[:,iVar] = newCoords
+            @show tmpModel=reshape(models[iVar],newCoords...)
+            @show Models[iVar]=tmpModel
 
             for iCoord in eachindex(newCoords)
                 if newCoords[iCoord]!== modelPoints[iCoord] && newCoords[iCoord] !== 1
                     @error "the model should have the same dimension! (or constant)"
                 end
             end
-
+        end
     end
     
     #endregion
     @show Models, ModelPoints
-    
-end
-
-function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
-
 
 
     
-    for iVar in eachindex(vars)
-        CartesianDependency=findCartesianDependency(vars[iVar],length(coordinates))
-        if ndims(models[iVar]) === CartesianDependency
-            @error "model parameter dimension is not what you declared in the equation!"
-        end
-        if sum(CartesianDependency) === 0 # when it is a constant
-            tmpModel=Array{Any,Ndimension}(undef,(ones(Int, Ndimension)...)...)
-            ModelPoints[:,iVar] = ones(Int, Ndimension)
-            tmpModel[vec2car(ones(Int, Ndimension))] = models[iVar]
-            Models[iVar]=tmpModel
-        else
-            #@show models[iVar],iVar,CartesianDependency, vars[iVar]
-            newCoords=expandVectors(size(models[iVar]),CartesianDependency)
-            ModelPoints[:,iVar] = newCoords
- 
-            tmpModel=reshape(models[iVar],newCoords...)
-            Models[iVar]=tmpModel
-
-            for iCoord in eachindex(newCoords)
-                if newCoords[iCoord]!== modelPoints[iCoord] && newCoords[iCoord] !== 1
-                    @error "the model should have the same dimension! (or constant)"
-                end
-            end
-        end
-     
-    end
-
-    #endregion
-
     #region construction of the fields
 
     wholeRegionPoints = nothing
 
     if absorbingBoundaries === nothing
         wholeRegionPoints=modelPoints
-        absorbingBoundaries = zeros(Int,2, Ndimension)
+        absorbingBoundaries = zeros(Int,2, newD)
     elseif absorbingBoundaries === "CerjanBoundary"
         wholeRegionPoints=modelPoints
-        absorbingBoundaries = ones(Int,2, Ndimension-1)*CerjanGridPoints
+        absorbingBoundaries = ones(Int,2, newD-1)*CerjanGridPoints
         absorbingBoundaries=[absorbingBoundaries; 0 0]
         wholeRegionPoints=modelPoints.+sum(absorbingBoundaries,1) 
     else
@@ -135,42 +145,84 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
         elseif size(absorbingBoundaries)[2] === size(modelPoints)[1]-1 && timeMarching
             absorbingBoundaries=[absorbingBoundaries; 0 0]
         end
-        wholeRegionPoints=modelPoints.+sum(absorbingBoundaries,1) 
+        wholeRegionPoints=modelPoints.+ sum(absorbingBoundaries, dims=1)[:]
+    end
+    wholeRegionPointsSpace=wholeRegionPoints[1:end-1]
+
+    #endregion
+
+
+    #region 
+
+    # Preferred geometry at each spatial point.
+    # Later this can be filled from a table or a classifier.
+    geometryPreference = fill(1, Tuple(wholeRegionPointsSpace))
+
+    spacePointsUsed=Vector{Any}(undef, nGeometry)
+    timePointsUsedForOneStep=Vector{Any}(undef, nGeometry)
+    for iGeometry ∈ 1:nGeometry
+        localPointVecs = localPointsIndices[iGeometry]
+        spacePointsUsed[iGeometry] = localPointVecs[end][1:end-1]
+        timePointsUsedForOneStep[iGeometry] = localPointVecs[end][end]
     end
 
+    # For now, all points use geometry 1, so this is the active time depth.
+    activeTimePoints = timePointsUsedForOneStep[1]
 
-    # some useful stuff
-
-
-    @show spacePointsUsed=car2vec(localPointsIndices[end])[1:end-1]
-    timePointsUsedForOneStep=car2vec(localPointsIndices[end])[end]
-    wholeRegionPointsSpace=wholeRegionPoints[1:end-1]
-    return costFunctions,場,champsLimité
+    # Fields
  
-    # we need to put the left and right regions in order that centre ν configuration can pass
+    場 = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
 
-    #emptyRegionPointsSpace=wholeRegionPointsSpace.+ 2 .* spacePointsUsed
-
-    #場dummy=Array{Any,2}(undef,NtypeofFields,timePointsUsedForOneStep)
-    場 = Array{Any,2}(undef,NtypeofFields,timePointsUsedForOneStep)
-    
-
-    for it in 1:timePointsUsedForOneStep
-        for iField in eachindex(fields)
-            newstring=split(string(fields[iField]),"(")[1]*"_mod"*"_t="*string(it)
-            場[iField,it]=Symbolics.variables(Symbol(newstring),Base.OneTo.(Tuple(wholeRegionPointsSpace))...)
+    for it ∈ 1:activeTimePoints
+        for iField ∈ 1:NtypeofFields
+            newstring = split(string(fields[iField]), "(")[1] * "_mod_t=" * string(it)
+            場[iField, it] = Symbolics.variables(
+                Symbol(newstring),
+                Base.OneTo.(Tuple(wholeRegionPointsSpace))...
+            )
         end
     end
 
+
     #since everything is super clumsy, here we make several useful functions to change one coordinate to another
     
-    conv=spaceCoordinatesConversionfunctions(absorbingBoundaries[:,1:end-1], Ndimension-1)
-
+    conv=spaceCoordinatesConversionfunctions(absorbingBoundaries[:,1:end-1], newD-1)
     #endregion 
+
+    # Useful point lists
+    PointsSpace = CartesianIndices(Tuple(wholeRegionPointsSpace))
+    NpointsSpace = length(PointsSpace)
+
+    # For now, test functions are still identified with spatial points
+    νWhole = collect(PointsSpace)
+    wholeMin = νWhole[1]
+    wholeMax = νWhole[end]
+    modelMin = CartesianIndex(ones(Int, newD-1)...)
+
+
+
+    # Pointwise preferred geometry and corresponding relative centre
+    νGeometry = Vector{Int}(undef, NpointsSpace)
+    νRelative = Vector{Any}(undef, NpointsSpace)
+
+    for iPoint in eachindex(νWhole)
+        νtmpWhole = νWhole[iPoint]
+        iGeometry = geometryPreference[νtmpWhole]
+        νGeometry[iPoint] = iGeometry
+
+        # For now take the first centre of that geometry.
+        # Later this can be refined if one point wants another centre within the same geometry.
+        νRelative[iPoint] = middlepoints[iGeometry]
+    end
+
+ 
+
+    #endregion
+
 
     #region making a maskingField (for limited source areas, boundary conditions, etc.)
 
-    maskingField=Array{Any,Ndimension-1}(undef,Tuple(wholeRegionPointsSpace)) # maskingField is defined only for whole domain
+    maskingField=Array{Any,newD-1}(undef,Tuple(wholeRegionPointsSpace)) # maskingField is defined only for whole domain
     champsLimité = nothing
     if maskedRegionInSpace === nothing
         maskingField .= 1.0
@@ -200,277 +252,166 @@ function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationI
         @error "maskedRegionInSpace should be a 1D array of CartesianIndex (if it is CartesianIndices, you need to collect(Tuple()))"
     end
 
-
     #endregion
 
-    #region relative ν to be considered, especially around the boundaries, useful for the following sections
-
-    PointsSpace=CartesianIndices(Tuple(wholeRegionPointsSpace))
-    NpointsSpace=length(PointsSpace) # number of points in space
-
-    NtestfunctionsInSpace=NpointsSpace # this assumption is valid only for test functions related to grid points
-
-    νWhole=Array{Any,1}(undef,NtestfunctionsInSpace) # the coordinate in wholeRegionPointsSpace: for the moment mapping from testfunction to ν is bijective
-
-    # below is only for the bijective projection between test functions and ν
-
-    for iPoint in eachindex(νWhole)
-
-        νWhole[iPoint] = PointsSpace[iPoint] # this should be not true for higher B-spline test functions
-
-    end
-
-
-    νRelative=Array{Any,1}(undef,NtestfunctionsInSpace) # the relative coordinate to take (the coordinate used for the semi-symbolic operator derivation)
-    νRelative.=middlepoint
-
-
-    
-    #endregion
-
-    #region we construct the numerical operators for each test function that is related to its corresponding point
-
-    # first we compute the νRelative more seriously if testOnlyCentre we might do nothing at all
-
-    if testOnlyCentre
-        # If we compute only the operators without boundaries, we use kind of 'truncated' crazy operators 
-        # derived at the centre point and we do not talk about it, just believe the absorbing boundaries
-        # like, tant pis, il n'y a pas de points donc j'ignore juste !
-
-        # maybe we do not do anything!
-
-    else
-
-        # we use this clause only if we are interested in a serious boundary conditions, 
-        # i.e. not the artificial cartesian box boundaries (we can just apply some stupid absorbing boundaries in that case)
-        # Hence this clause should be more generalised even it kills the performance
-        #  like, we give an array of free surface or discontinuities in CartesianIndex arrays 
-        # and we look all the points concerned
-
-        # we need to explore everywhere in the wholeRegionPoints! Free surface etc. should be very much affected 
-        #
-      
-        boundaryPointsSpace=[]
-        for iDimSpace in 1:Ndimension-1 # we take care of the boundaries of the Cartesian box (it should be the same for internal/external topography)
-            # points concerned
-            leftstart=1
-            leftend=spacePointsUsed[iDimSpace]÷2
-            rightstart=NpointsSpace[iDimSpace]-spacePointsUsed[iDimSpace]÷2+1
-            rightend=NpointsSpace[iDimSpace]
-            # suppose that the domain is sufficiently big (maybe it is not the case for some crazy topography ...)
-            for iCoord in range(leftstart,leftend)
-                
-
-
-            end
-
-            for iCoord in range(rightstart,rightend)
-
-            end
-        end
-    end
-
-    # here the number of test functions should not be necessarily the number of points but I will work later
-
-    costFunctions=Array{Any,2}(undef,NtypeofExpr,NtestfunctionsInSpace)
-
-    #@show semiSymbolicsOperators
-    #@show localMaterials[1,15],localFields,size(localFields)
-    #@show Models[1][10,15,1]
-
+    #region
+    # one operator per test point in space, for now
+    NtestfunctionsInSpace = length(νWhole)
+    costFunctions = Array{Any,2}(undef, NtypeofExpr, NtestfunctionsInSpace)
+    costFunctions .= 0
     for iTestFunctions in eachindex(νWhole)
-        # here each test function is connected to one ν point 
-        # We need to be careful that this can be no more true for different basis functions other than linear B-spline
-        iPoint = iTestFunctions 
-        νtmpWhole=νWhole[iPoint]
-        # be careful with the two lines above, they are based on the assumption that each test function is linked to one collocated point
+        iPoint = iTestFunctions
+        νtmpWhole = νWhole[iPoint]
 
+        # preferred geometry for this test point
+        iGeometry = νGeometry[iPoint]
+        localPointsHere = localPointsIndices[iGeometry]
+        middlepointHere = νRelative[iPoint]              # for now = middlepoints[iGeometry][1]
+        localPointsSpaceHere = carDropDim.(localPointsHere)
+        localPointsSpaceIndicesHere = CartesianIndices(Tuple(localPointsSpaceHere[end]))
+        middlepointSpaceHere = svec2car(carDropDim(middlepointHere))
+        
+        # if time is appended, the active time depth depends on the geometry
+        iTimeMax = timePointsUsedForOneStep[iGeometry]
 
-        #νtmpModel=conv.whole2model(νtmpWhole)
-        νᶜtmpWhole = localPointsSpaceIndices .+ (νtmpWhole - carDropDim(νRelative[iPoint])) # this is the shift vector
+        # shift local stencil to the current whole-space test point
+     
+        νᶜtmpWhole = localPointsSpaceIndicesHere .+ (νtmpWhole .- svec2car(carDropDim(middlepointHere)))
         νᶜtmpModel = conv.whole2model.(νᶜtmpWhole)
 
-        # examine νᶜtmpWhole if it is out of the range 
+        # linear indexing on the chosen local stencil
+        localLinearIndices = LinearIndices(Tuple(localPointsHere[end]))
 
 
+        for iExpr in 1:NtypeofExpr
+            tmpMapping = Dict()
 
-        for iExpr in eachindex(semiSymbolicsOperators[1,:])
+            for iT in 1:iTimeMax
+                # material variables
+                for iVar in 1:NtypeofMaterialVariables
+                    spaceModelBouncedPoints = ModelPoints[1:end-1, iVar]
+                    iiT = ModelPoints[end, iVar] > 1 ? iT : 1
 
-            tmpMapping=Dict()
-
-
-            for iT in 1:timePointsUsedForOneStep
-                
-                for iVar in eachindex(vars)
                     
-                    spaceModelBouncedPoints=ModelPoints[1:end-1,iVar]
-
-                    if ModelPoints[end,iVar] > 1
-                        iiT=iT
-                    else
-                        iiT = 1
-                    end
-
-
-                    # model parameters should be bounced at the whole region limits
                     νᶜtmpModelTruncated = BouncingCoordinates.(νᶜtmpModel, Ref(spaceModelBouncedPoints))
 
                     for jPoint in νᶜtmpWhole
-                        jPointLocal = jPoint - νtmpWhole + carDropDim(νRelative[iPoint])
-                        jPointTLocal = carAddDim(jPointLocal,iT)
-                        linearjPointTLocal=LinearIndices(localPointsIndices)[jPointTLocal]
-              
-                        tmpMapping[localMaterials[iVar,linearjPointTLocal]] = Models[iVar][carAddDim(νᶜtmpModelTruncated[jPointLocal],iiT)]
-                        
+                        jPointLocal = jPoint - νtmpWhole + svec2car(carDropDim(middlepointHere))
+                        jPointTLocal = carAddDim(jPointLocal, iT)
+                        linearjPointTLocal = localLinearIndices[jPointTLocal]
+
+                        tmpMapping[varM[iVar, linearjPointTLocal]] =
+                            Models[iVar][carAddDim(νᶜtmpModelTruncated[jPointLocal], iiT)]
                     end
+
 
                 end
 
+                # fields
                 for jPoint in νᶜtmpWhole
-                    #@show iPoint, jPoint
-                    jPointLocal = jPoint - νtmpWhole + carDropDim(νRelative[iPoint])
-                    jPointTLocal = carAddDim(jPointLocal,iT)
-                    linearjPointTLocal=LinearIndices(localPointsIndices)[jPointTLocal]
-                    #jPointT=carAddDim(jPoint,iT)
-                    #linearjPointT=LinearIndices(localPointsIndices)[jPointT]
-                    for iField in eachindex(fields)
-                        if is_all_less_than_or_equal(CartesianIndex(ones(Int, Ndimension-1)...),conv.whole2model(jPoint)) && is_all_less_than_or_equal(conv.whole2model(jPoint),vec2car(ModelPoints[1:end-1]))
-                            # when it is inside the model domain box
-                            tmpMapping[localFields[linearjPointTLocal,iField]] = 場[iField,iT][jPoint]*maskingField[jPoint]
+                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
+                    jPointTLocal = carAddDim(jPointLocal, iT)
+                    linearjPointTLocal = localLinearIndices[jPointTLocal]
 
-                        elseif is_all_less_than_or_equal(νWhole[1],jPoint) && is_all_less_than_or_equal(jPoint,νWhole[end])
-                            # if it is in the absorbing boundary zones we apply a simple Cerjan
-                            if iT === timePointsUsedForOneStep # the last one (the future) will be using un-weighted operators
-                                tmpMapping[localFields[linearjPointTLocal,iField]] = 場[iField,iT][jPoint]*maskingField[jPoint]
-                            else
-                                distance2 = distance2_point_to_box(conv.whole2model(jPoint),CartesianIndex(ones(Int, Ndimension-1)...), vec2car(ModelPoints[1:end-1]))
-                                tmpMapping[localFields[linearjPointTLocal,iField]] = 場[iField,iT][jPoint]*maskingField[jPoint]*CerjanBoundaryCondition(distance2)
-                            end
+                    jPointInWhole = is_all_less_than_or_equal(wholeMin, jPoint) &&
+                                    is_all_less_than_or_equal(jPoint, wholeMax)
+
+                    if !jPointInWhole
+                        for iField in 1:NtypeofFields
+                            tmpMapping[Ulocal[linearjPointTLocal, iField]] = 0.0
+                        end
+                        continue
+                    end
+
+                    jPointModel = conv.whole2model(jPoint)
+
+                    for iField in 1:NtypeofFields
+                        if is_all_less_than_or_equal(modelMin, jPointModel) &&
+                        is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+
+                            #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
+                            #    場[iField, iT][jPoint] * maskingField[jPoint]
+                            costFunctions[iExpr, iTestFunctions] += 
+                                場[iField, iT][jPoint] * maskingField[jPoint] *
+                                substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
                         else
-                            tmpMapping[localFields[linearjPointTLocal,iField]]=0.
-                            #jPoint, νWhole[1],νWhole[end]
+                            if iT == iTimeMax
+                                #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
+                                #    場[iField, iT][jPoint] * maskingField[jPoint]
+                                costFunctions[iExpr, iTestFunctions] += 
+                                    場[iField, iT][jPoint] * maskingField[jPoint] *
+                                    substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
+                            else
+                                distance2 = distance2_point_to_box(
+                                    jPointModel,
+                                    modelMin,
+                                    vec2car(ModelPoints[1:end-1, 1]),
+                                )
+                                #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
+                                #    場[iField, iT][jPoint] *
+                                #    maskingField[jPoint] *
+                                #    CerjanBoundaryCondition(distance2)
+                                costFunctions[iExpr, iTestFunctions] += 
+                                    場[iField, iT][jPoint] * maskingField[jPoint] *
+                                    CerjanBoundaryCondition(distance2) *
+                                    substitute(symA[linearjPointTLocal,iField,iExpr,Geometry],tmpMapping)
+                            end
                         end
                     end
                 end
 
-                        
+            end
 
-                        #場[iField,it]=string_as_varname(newstring, Array{Any,Ndimension-1}(undef,Tuple(wholeRegionPointsSpace)))
-                        #
-                        #νᶜtmpWholeMissing = ReplacerHorsLimiteParMissing(νᶜtmpWhole,PointsSpace[end])
-                        # field values are defined only at the whole region and not at the Empty
-                        #replace!(x -> x>0.2 ? missing : x, Array{Union{Float64, Missing}}(A) )
-                        #replace!(x -> )
-                        
-                        
-                
-               
-            end
-            tmpAddress = nothing
-            if testOnlyCentre
-                tmpAddress = 1
-            else
-                tmpAddress=carDropDim(νRelative[iPoint])
-            end
-            costFunctions[iExpr,iTestFunctions]=substitute(semiSymbolicsOperators[tmpAddress,iExpr],tmpMapping)
-            # be careful that semiSymbolicsOperators could be 2D
+            # centre-only address: always use the geometry centre now
+            #costFunctions[iExpr, iTestFunctions] +=
+            #    substitute(Av[iExpr,iGeometry], tmpMapping)
         end
     end
 
-    #@show costFunctions
+
 
     #endregion
 
-    return costFunctions,場,champsLimité
+
+
+    return (costFunctions=costFunctions,場=場,champsLimité=champsLimité)
 
 end
 
+carDropDim(v::SVector{N,T}) where {N,T} = SVector{N-1,T}(ntuple(i -> v[i], N-1))
+
+function spaceCoordinatesConversionfunctions(absorbingBoundaries, NdimensionMinusTime)
+    offset_model = vec2car(absorbingBoundaries[1, 1:NdimensionMinusTime])
+    #offset_empty = vec2car(spacePointsUsed)
+
+    model2whole(a::CartesianIndex) = a + offset_model
+    whole2model(a::CartesianIndex) = a - offset_model
+    #whole2empty(a::CartesianIndex) = a + offset_empty
+    #empty2whole(a::CartesianIndex) = a - offset_empty
+    #model2empty(a::CartesianIndex) = whole2empty(model2whole(a))
+    #empty2model(a::CartesianIndex) = whole2model(empty2whole(a))
+    return(; model2whole, whole2model)
+    #return (; model2whole, whole2model, whole2empty, empty2whole, model2empty, empty2model)
+end
 
 
+function BouncingCoordinates(a::CartesianIndex,PointsUsed)
+    #
+    # this will bounce the boundary inside the PointsUsed vector
+    #
+    # i.e. get the nearby coordinates inside the domain to fake the continuity
 
-
-function _____quasiNumericalOperatorConstruction(operators,modelName,models,forceModels,famousEquationType,modelPoints,IneedExternalSources;maskedRegionForFieldInSpace = nothing,maskedRegionForSourcesInSpace=nothing,iExperiment=nothing)
-
-    NpointsUsed=iExperiment.iPointsUsed
-    # this is a big wrapper that reads the semi symbolic expressions to give a set of numerical operators (with symbolic expression in time)
-    # which will call wrappers of onstructingNumericalDiscretisedEquations(Masked)
-
-    operators=operators["operators"]
-    operatorPDE,operatorForce,eqInfo = operators
-    exprs,fields,vars,extexprs,extfields,extvars,coordinates=eqInfo
-
-    AjiννᶜU,utilities=operatorPDE
-    if IneedExternalSources 
-        Γg,utilitiesForce=operatorForce
+    if length(a) !== length(PointsUsed)
+        @error "cannot bound this CartesianIndex due to the dimension mismatch"
     end
-
-    lhsConfigurations = @strdict semiSymbolicOpt=AjiννᶜU coordinates modelName models fields vars famousEquationType modelPoints utilities maskedRegion=maskedRegionForFieldInSpace NpointsUsed
-
-    #numOperators,file = @produce_or_load(constructingNumericalDiscretisedEquations,lhsConfigurations,datadir("numOperators",savename(lhsConfigurations));filename = config -> savename(lhsConfigurations; ignores=["vars", "fields"]))
-    numOperators = myProduceOrLoad(constructingNumericalDiscretisedEquations,lhsConfigurations,"numOperators","lhs")
-
-
-    # left-hand side, which is far more recyclable than r.h.s.
-    
-    costfunctionsLHS,fieldLHS,_=numOperators["numOperators"]
-    
-
-    costfunctionsRHS = similar(costfunctionsLHS)
-    costfunctionsRHS .= 0.
-    fieldRHS = similar(fieldLHS)
-    fieldRHS .= 0.
-    
-    champsLimité = nothing
-
-    if IneedExternalSources 
-        rhsConfigurations = @strdict semiSymbolicOpt=Γg coordinates modelName models=forceModels fields=extfields vars=extvars famousEquationType modelPoints utilities=utilitiesForce maskedRegion=maskedRegionForSourcesInSpace NpointsUsed
-        numOperators,file=produce_or_load(constructingNumericalDiscretisedEquations,rhsConfigurations,datadir("numOperators",savename(rhsConfigurations));filename = config -> savename("source",rhsConfigurations; ignores=["vars", "fields"]))
-
-        numOperators = myProduceOrLoad(constructingNumericalDiscretisedEquations,rhsConfigurations,"numOperators","rhs")
-       
-        costfunctionsRHS,fieldRHS,champsLimité=numOperators["numOperators"]
-
+    avector=car2vec(a)
+    for iCoord in eachindex(avector)
+        if avector[iCoord] < 1
+            avector[iCoord] = 1
+        elseif avector[iCoord] > PointsUsed[iCoord]
+            avector[iCoord] = PointsUsed[iCoord]
+        end
     end
-  
-    #@show size(costfunctionsLHS),size(costfunctionsRHS)
-    #@show costfunctionsRHS[1,430],costfunctionsRHS[1,431],costfunctionsRHS[1,434]
-    #costfunctions=0.#costfunctionsLHS[1,1]-costfunctionsLHS[1,1]
-    costfunctions = costfunctionsLHS .- costfunctionsRHS
-    #numOperators=(costfunctions=costfunctions)
-    return costfunctions,fieldLHS,fieldRHS,champsLimité
+    a=vec2car(avector)
+    return a
 end
-
-
-function getModelPoints(models,pointsInTime,timeMarching)
-    
-    fakeNt = 1
-    if timeMarching
-        fakeNt = pointsInTime+1
-        modelPoints = (size(models)...,fakeNt) # Nx, Ny etc thing. Nt is also mentioned and it should be the last element!
-    else
-        modelPoints = (size(models)...,1)
-    end
-    return modelPoints 
-end
-
-
-
-
-
-
-
-function _____constructingNumericalDiscretisedEquations(config::Dict)
-    # just a wrapper
-    #@unpack semiSymbolicOpt,coordinates,modelName,models,fields,vars,famousEquationType,modelPoints,utilities, maskedRegion, NpointsUsed = config
-   
-    @unpack semiSymbolicCoefs, models, modelName, modelPoints, myEquationInside, maskedRegion = config
-    @show config
-
-    return
-    costfunctions,場,champsLimité=constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;initialCondition=0.0)
-    numOperators=(costfunctions=costfunctions,場=場,champsLimité=champsLimité)
-
-    #@show costfunctions
-    return @strdict(numOperators)
-end
-

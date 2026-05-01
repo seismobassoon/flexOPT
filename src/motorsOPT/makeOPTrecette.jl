@@ -25,8 +25,8 @@ function makeOPTsemiSymbolic(params::Dict)
     numbersOfTheSystem = numbersOfTheSystemL
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
-    Ajiννᶜ,AjiννᶜU,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
-    lhs=(Ajiννᶜ=Ajiννᶜ,AjiννᶜU=AjiννᶜU,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
+    Ajiννᶜ,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
+    lhs=(Ajiννᶜ=Ajiννᶜ,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
 
     # compact coefficients for r.h.s. of the equation
     equationCharacteristics=equationCharacteristicsForce
@@ -34,8 +34,8 @@ function makeOPTsemiSymbolic(params::Dict)
     numbersOfTheSystem = numbersOfTheSystemR
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
-    Γjiννᶜ,ΓjiννᶜF,Flocal =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
-    rhs=(Γjiννᶜ=Γjiννᶜ,ΓjiννᶜF=ΓjiννᶜF,Flocal=Flocal,varF=varM,CartesianDependencies=CartesianDependencies)
+    Γjiννᶜ,Flocal =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
+    rhs=(Γjiννᶜ=Γjiννᶜ,Flocal=Flocal,varF=varM,CartesianDependencies=CartesianDependencies)
 
     #
     nodes=configsTaylorμ.availablePointsConfigurations
@@ -286,11 +286,11 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
 
     #region make Ajiννᶜ and AjiννᶜU symbolically (which we will soon remove!)
     Ajiννᶜ = Array{Num,4}(undef,length(pointsIndices),NtypeofFields,NtypeofExpr,nGeometry)
-    AjiννᶜU = Array{Num,2}(undef,NtypeofExpr,nGeometry)
+    #AjiννᶜU = Array{Num,2}(undef,NtypeofExpr,nGeometry)
     
     # this is the cost function for ν point so the number of elements is just the number of expressions (governing equations)
     Ajiννᶜ .= 0
-    AjiννᶜU .= 0
+    #AjiννᶜU .= 0
     indexLinearα = 1
    
     for iExpr ∈ 1:NtypeofExpr,iField ∈ 1:NtypeofFields
@@ -308,8 +308,8 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
                     xᶜLinear = LI_points[svec2car(xᶜ)]
                     U_HERE = Ulocal[xᶜLinear,iField]                    
                     substitutedValue = substitute(nodeValue, localmapηᶜ)
-                    Ajiννᶜ[xᶜLinear,iField,iExpr] += newCoef[xLinear,xᶜLinear,indexLinearα,iConfigGeometry] *substitutedValue
-                    AjiννᶜU[iExpr]+= Ajiννᶜ[xᶜLinear,iField,iExpr] * U_HERE
+                    Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] += newCoef[xLinear,xᶜLinear,indexLinearα,iConfigGeometry] *substitutedValue
+                    #AjiννᶜU[iExpr,iConfigGeometry]+= Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] * U_HERE
                 end
 
             end
@@ -319,7 +319,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     end
 
     #return coefWYYKK,Cˡη,tableForμPoints, newCoef
-    return Ajiννᶜ,AjiννᶜU,Ulocal
+    return Ajiννᶜ,Ulocal
 end
 
 

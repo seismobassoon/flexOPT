@@ -31,8 +31,8 @@ module flexOPT
 
     # semi-symbolics operators to fully numerical operators
     #include("fullyNumericalOPT/makeCostFunctions.jl")
-    include("fullyNumericalOPT/costFunctions.jl")
-
+    include("fullyNumericalOPT/makeCostFunctions.jl")
+    export quasiNumericalOperatorConstruction
 
 
     export getModelPoints,quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
