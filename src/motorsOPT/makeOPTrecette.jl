@@ -22,17 +22,17 @@ function makeOPTsemiSymbolic(params::Dict)
     equationCharacteristics=equationCharacteristics
     numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
+    bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Ajiννᶜ,AjiννᶜU,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
-    lhs=(Ajiννᶜ=Ajiννᶜ,AjiννᶜU=AjiννᶜU,Ulocal=Ulocal,varM=varM)
+    lhs=(Ajiννᶜ=Ajiννᶜ,AjiννᶜU=AjiννᶜU,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
 
     # compact coefficients for r.h.s. of the equation
     equationCharacteristics=equationCharacteristicsForce
     numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
+    bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Γjiννᶜ,ΓjiννᶜF,Flocal =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
-    rhs=(Γjiννᶜ=Γjiννᶜ,ΓjiννᶜF=ΓjiννᶜF,Flocal=Flocal,varF=varM)
+    rhs=(Γjiννᶜ=Γjiννᶜ,ΓjiννᶜF=ΓjiννᶜF,Flocal=Flocal,varF=varM,CartesianDependencies=CartesianDependencies)
 
     #
     nodes=configsTaylorμ.availablePointsConfigurations

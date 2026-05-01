@@ -31,17 +31,17 @@ function quasiNumericalOperatorConstruction(optRec,models)
     #
     #endregion
 
-    recette =optRec["recette"]
-    
-    Av=recette.lhs.AjiννᶜU
-    varM=recette.lhs.varM
-    Γg=recette.rhs.ΓjiννᶜF
-    varF=recette.rhs.varF
-    nodes=recette.nodes
-    centresIndices=recette.centresIndices
-    numbersOfTheSystem=recette.numbersOfTheSystem
 
-    @unpack timeMarching, nGeometry, NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem
+    @unpack lhs, rhs, nodes, centresIndices, numbersOfTheSystem=optRec["recette"]
+    Av=lhs.AjiννᶜU
+    varM=lhs.varM
+    CD_v=lhs.CartesianDependencies 
+    Γg=rhs.ΓjiννᶜF
+    varF=rhs.varF
+    CD_g=rhs.CartesianDependencies
+
+
+    @unpack timeMarching,nGeometry,Ndimension,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem
     # normally the geometry configurations should be proposed in the preferred order
 
     if length(models) !== NtypeofMaterialVariables 
@@ -50,8 +50,38 @@ function quasiNumericalOperatorConstruction(optRec,models)
     
     Models=Array{Any,1}(undef,NtypeofMaterialVariables)
     ModelPoints=Array{Int,2}(undef,Ndimension,NtypeofMaterialVariables)
-    
 
+    # the last coordinate should be cosidered as time
+    if !timeMarching
+        localPointsIndices=CartesianIndices(Tuple([car2vec(localPointsIndices[end]);1]))
+        middlepoint=CartesianIndex([car2vec(middlepoint);1]...)
+        tmpT=Symbolics.variable(timeDimensionString)
+        coordinates = (coordinates...,tmpT)
+        modelPoints = (modelPoints...,1)
+    end
+    
+    
+    for iVar ∈ 1:NtypeofMaterialVariables
+        if sum(CD_v[:,iVar]) == 0 # when it is a constant
+            tmpModel=Array{Any,Ndimension}(undef,(ones(Int, Ndimension)...)...)
+            ModelPoints[:,iVar] = ones(Int, Ndimension)
+            tmpModel[vec2car(ones(Int, Ndimension))] = models[iVar]
+            Models[iVar]=tmpModel
+        else
+            #@show models[iVar],iVar,CartesianDependency, vars[iVar]
+            newCoords=expandVectors(size(models[iVar]),CartesianDependency)
+            ModelPoints[:,iVar] = newCoords
+ 
+            tmpModel=reshape(models[iVar],newCoords...)
+            Models[iVar]=tmpModel
+
+            for iCoord in eachindex(newCoords)
+                if newCoords[iCoord]!== modelPoints[iCoord] && newCoords[iCoord] !== 1
+                    @error "the model should have the same dimension! (or constant)"
+                end
+            end
+
+    end
 
 end
 

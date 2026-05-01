@@ -51,7 +51,8 @@ function varMmaker(maxPointsUsed,coordinates,vars,∂)
     R = CartesianIndices(Tuple(maxPointsUsed))
 
     varM=Array{Any,2}(undef,length(vars),length(R))
-   
+    CartesianDependencies=Array{Int,2}(undef,Ndimension,length(vars))
+
     for iVar in eachindex(vars)
 
 
@@ -59,7 +60,7 @@ function varMmaker(maxPointsUsed,coordinates,vars,∂)
      
         
         CartesianDependency=findCartesianDependency(vars[iVar],Ndimension,∂)
-       
+        
         smallVarM=Symbolics.variables(Symbol(newstring),1:length(R))
         for j in R
             linearJ=LinearIndices(R)[j]
@@ -68,9 +69,10 @@ function varMmaker(maxPointsUsed,coordinates,vars,∂)
             smallVarM[linearJ]=smallVarM[linearRealJ]
         end
         varM[iVar,:]=smallVarM
+        CartesianDependencies[:,iVar]=CartesianDependency
     end
     
-    return varM
+    return varM,CartesianDependencies
 end
 
 function PDECoefFinder(orders,coordinates,expr,field,vars)
@@ -481,6 +483,6 @@ function bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplines
             bigα[iField,iExpr]=unique(tmpNonZeroAlphas)
         end
     end
-    varM=varMmaker(pointsUsedForFields,coordinates,vars,∂)
-    return bigα,varM
+    varM,CartesianDependencies=varMmaker(pointsUsedForFields,coordinates,vars,∂)
+    return bigα,varM,CartesianDependencies
 end
