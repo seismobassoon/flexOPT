@@ -1,5 +1,5 @@
 
-function quasiNumericalOperatorConstruction(optRec)
+function quasiNumericalOperatorConstruction(optRec,models)
 
     #region general introduction
     #
@@ -40,102 +40,25 @@ function quasiNumericalOperatorConstruction(optRec)
     nodes=recette.nodes
     centresIndices=recette.centresIndices
     numbersOfTheSystem=recette.numbersOfTheSystem
-    timeMarching=numbersOfTheSystem.timeMarching
-    nGeometry=numbersOfTheSystem.nGeometry # normally the geometry configurations should be proposed in the preferred order
 
-
-    
-
-end
-
-function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
-
-    # if modelPoints = nothing -> models[1] will be the reference for the modelPoints (in space)
-    # if timeMarching modelPoints will get an additional dimension (>1)
-    # if !timeMarching modelPoints will get an additional dimension (=1)
-
-    #region todo list
-    #todo list
-    # 
-    # this function is tooooooo complicated! I think I can simplify very much this!
-    #
-    #
-    #  need to work on the bc, same like the masked thing (limited region of source)
-    #
-    # absorbing boundaries : I think we can already put the bc inside the numerical operators but be careful with the time marching: search for weightingCerjan
-    # 
-    # need extend to 4 points with the same test functions (3 points) -> staggered grid
-    #  
-    # I have to include some complex initial condition for 場
-    #
-    
-
-    #region unpacking, N-dimensionalising all the models 
-
-    # ce dont j'ai besoin
-    semiSymbolicsOperators=semiSymbolicCoefs["output"].AjiννᶜUs
-    
-
-    testOnlyCentre = false
- 
-    if size(semiSymbolicsOperators)[1] === 1
-        testOnlyCentre = true
-    elseif ndims(semiSymbolicsOperators) !==2
-        @error "the semi symbolic operators are not computed correctly!"
-    end
-
-
-
-    coordinates=myEquationInside.coordinates
-    fields=myEquationInside.fields
-    vars=myEquationInside.vars
-
-    utilities=semiSymbolicCoefs["output"].utilities
-
-    @unpack middlepoint,middlepointLinear,localPointsIndices,localMaterials,localFields,timeMarching = utilities
-    timeMarching = utilities.timeMarching
-
-
-    # not like allsame = all(s -> s == size.(models)[1], size.(models))
-
-   
-    # the last coordinate should be cosidered as time
-
-    if !timeMarching
-        localPointsIndices=CartesianIndices(Tuple([car2vec(localPointsIndices[end]);1]))
-        middlepoint=CartesianIndex([car2vec(middlepoint);1]...)
-        tmpT=Symbolics.variable(timeDimensionString)
-        coordinates = (coordinates...,tmpT)
-        #modelPoints = (modelPoints...,1)
-        tmp_del = Symbolics.variable("∂"*timeDimensionString)
-        tmp_del = Differential(tmpT)
-        ∂ .= push!(∂,tmp_del)
-        tmp_del_2 = Symbolics.variable("∂"*timeDimensionString*"²")
-        tmp_del_2 = Differential(tmpT)*Differential(tmpT)
-        ∂² .= push!(∂²,tmp_del_2)
-    end
-
-    #@show coordinates,∂,∂²
-
-    localPointsSpaceIndices=CartesianIndices(Tuple(car2vec(localPointsIndices[end])[1:end-1]))
-    Ndimension=length(coordinates)
-    
-   
-    modelPoints=collect(modelPoints)
-
-    Models=[]
-
-    NtypeofMaterialVariables = length(vars)
-    NtypeofFields = length(fields)
-    NtypeofExpr = size(semiSymbolicsOperators)[end]
-
-    Models=Array{Any,1}(undef,NtypeofMaterialVariables)
-    ModelPoints=Array{Int,2}(undef,Ndimension,NtypeofMaterialVariables)
+    @unpack timeMarching, nGeometry, NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem
+    # normally the geometry configurations should be proposed in the preferred order
 
     if length(models) !== NtypeofMaterialVariables 
         @error "Each material has to have its own model"
     end
     
+    Models=Array{Any,1}(undef,NtypeofMaterialVariables)
+    ModelPoints=Array{Int,2}(undef,Ndimension,NtypeofMaterialVariables)
+    
+
+
+end
+
+function constructingNumericalDiscretisedEquations(semiSymbolicCoefs,myEquationInside,models,modelPoints,maskedRegion;absorbingBoundaries=nothing,initialCondition=0.0)
+
+
+
     
     for iVar in eachindex(vars)
         CartesianDependency=findCartesianDependency(vars[iVar],length(coordinates))
