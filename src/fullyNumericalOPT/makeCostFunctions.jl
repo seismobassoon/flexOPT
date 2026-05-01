@@ -1,16 +1,18 @@
-function quasiNumericalOperatorConstruction(optRec,modelFam;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
+function numericalOperatorConstruction(params::Dict)
+    @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
     costLHS=quasiNumericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
     costRHS=quasiNumericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
     costfunctions=costLHS.costFunctions-costRHS.costFunctions
     fieldLHS=costLHS.場
     fieldRHS=costRHS.場
     champsLimité=costRHS.場
-    return costfunctions,fieldLHS,fieldRHS,champsLimité
+    numOperators=(costfunctions=costfunctions,fieldLHS=fieldLHS,fieldRHS=fieldRHS,champsLimité=champsLimité)
+    return @strdict(numOperators)
 end
 
 
 
-function quasiNumericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
+function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
 
     #region general introduction
     #
