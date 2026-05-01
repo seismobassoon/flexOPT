@@ -25,9 +25,10 @@ julia>  famousEquations("1Dacceleration")
 
 function famousEquations(name::AbstractString) 
     exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂²=famousEquation(Val(Symbol("eq_"*name)))
-    equationCharacteristics=(exprs=exprs, fields=fields, vars=vars, extexprs=extexprs, 
-            extfields=extfields, extvars=extvars, coordinates=coordinates, ∂=∂, ∂²=∂²)
-    return equationCharacteristics
+    equationCharacteristics=(exprs=exprs, fields=fields, vars=vars, coordinates=coordinates, ∂=∂, ∂²=∂²)
+    equationCharacteristicsForce=(exprs=extexprs, fields=extfields, vars=extvars, coordinates=coordinates, ∂=∂, ∂²=∂²)
+
+    return equationCharacteristics,equationCharacteristicsForce
 end
 
 function famousEquation(::Val{:eq_1Dacceleration})

@@ -1,6 +1,39 @@
 # Analytical computation of WYYKK integral (look at demo1DKernelIntegral.ipynb)
 
-using .commonBatchs, UnPack, Symbolics
+using .commonBatchs, UnPack, Symbolics, SHA, Dates
+
+
+function short_array_string(v)
+    join(string.(Float64.(v)), "_")
+end
+
+function report_slug(params)
+    @unpack orderBspline1D, YorderBspline1Dμᶜ, YorderBspline1Dμ,
+            μᶜs, μs, maxNode, ν, lᶜ_nᶜ_max, l_n_max = params
+
+    readable = join([
+        "W$(orderBspline1D)",
+        "Yc$(YorderBspline1Dμᶜ)",
+        "Y$(YorderBspline1Dμ)",
+        "N$(maxNode)",
+        "nν$(length(ν))",
+        "nμc$(length(μᶜs))",
+        "nμ$(length(μs))",
+        "lc$(lᶜ_nᶜ_max)",
+        "l$(l_n_max)",
+    ], "__")
+
+    raw_signature = join([
+        "nu=" * short_array_string(ν),
+        "muc=" * short_array_string(μᶜs),
+        "mu=" * short_array_string(μs),
+    ], "__")
+
+    digest = bytes2hex(sha1(raw_signature))[1:10]
+
+    return readable * "__" * digest
+end
+
 
 
 function WYYKKIntegralNumerical(params;ImakeReport=true)
@@ -123,8 +156,22 @@ function WYYKKIntegralPureSymbolic(params::Dict)
 
     if ImakeReport
         
-        reportDir = joinpath(pwd(), "WYYKKIntegralPureSymbolic_report")
+        reportParentDir = joinpath(pwd(), "tmp/WYYKKIntegralPureSymbolic_report")
+        reportDir = joinpath(reportParentDir, report_slug(params) * "__" * Dates.format(now(), "yyyymmdd_HHMMSS"))
         mkpath(reportDir)
+        
+        open(joinpath(reportDir, "params_summary.txt"), "w") do io
+            println(io, "orderBspline1D = ", orderBspline1D)
+            println(io, "YorderBspline1Dμᶜ = ", YorderBspline1Dμᶜ)
+            println(io, "YorderBspline1Dμ = ", YorderBspline1Dμ)
+            println(io, "maxNode = ", maxNode)
+            println(io, "ν = ", ν)
+            println(io, "μᶜs = ", μᶜs)
+            println(io, "μs = ", μs)
+            println(io, "lᶜ_nᶜ_max = ", lᶜ_nᶜ_max)
+            println(io, "l_n_max = ", l_n_max)
+        end
+
 
         # Page 1: B-spline families
         save_bspline_report_plot(

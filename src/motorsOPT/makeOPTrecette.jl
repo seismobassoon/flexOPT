@@ -16,12 +16,25 @@ function makeOPTsemiSymbolic(params::Dict)
     TaylorOptionsμ=TaylorOptions(fieldItpl,supplementaryOrder)
     TaylorOptionsμᶜ=TaylorOptions(materItpl,supplementaryOrder)
 
-    equationCharacteristics=famousEquations(famousEquationType)
+    equationCharacteristics,equationCharacteristicsForce=famousEquations(famousEquationType)
+
+    # compact coefficients for l.h.s. of the equation
+    equationCharacteristics=equationCharacteristics
     numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
+    lhs=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
 
-    constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
+
+    # compact coefficients for r.h.s. of the equation
+    equationCharacteristics=equationCharacteristicsForce
+    numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    bigα,varM=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
+    rhs=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
+
+    recette=(lhs=lhs,rhs=rhs)
+    return @strdict(recette)
 
 end
 
@@ -107,9 +120,6 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
 
     #region 
     @show nTotalSmallα = sum(length(bigα[iExpr, iField]) for iField ∈ 1:NtypeofFields, iExpr ∈ 1:NtypeofExpr)
-
-    # the order is: (νᶜ,) ν, i, j  here
-    Ajiννᶜ = Array{Float64,5}(undef,nPoints,nPoints,NtypeofFields,NtypeofExpr,nTotalSmallα)
 
     # but this will already include bigα so the coefficients for each α_{nn'ji} should be given here
     #endregion
@@ -265,8 +275,8 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     #endregion
 
     #region make Ajiννᶜ and AjiννᶜU symbolically (which we will soon remove!)
-    Ajiννᶜ = Array{Num,3}(undef,length(pointsIndices),NtypeofFields,NtypeofExpr)
-    AjiννᶜU = Array{Num,1}(undef,NtypeofExpr)
+    Ajiννᶜ = Array{Num,4}(undef,length(pointsIndices),NtypeofFields,NtypeofExpr,nGeometry)
+    AjiννᶜU = Array{Num,2}(undef,NtypeofExpr,nGeometry)
     
     # this is the cost function for ν point so the number of elements is just the number of expressions (governing equations)
     Ajiννᶜ .= 0
@@ -299,7 +309,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     end
 
     #return coefWYYKK,Cˡη,tableForμPoints, newCoef
-    return Ajiννᶜ, AjiννᶜU,Ulocal
+    return Ajiννᶜ,AjiννᶜU,Ulocal
 end
 
 
