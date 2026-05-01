@@ -35,10 +35,10 @@ function quasiNumericalOperatorConstruction(optRec,models)
     @unpack lhs, rhs, nodes, centresIndices, numbersOfTheSystem=optRec["recette"]
     Av=lhs.AjiννᶜU
     varM=lhs.varM
-    CD_v=lhs.CartesianDependencies 
+    
     Γg=rhs.ΓjiννᶜF
     varF=rhs.varF
-    CD_g=rhs.CartesianDependencies
+
 
 
     @unpack timeMarching,nGeometry,Ndimension,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem
@@ -51,18 +51,25 @@ function quasiNumericalOperatorConstruction(optRec,models)
     Models=Array{Any,1}(undef,NtypeofMaterialVariables)
     ModelPoints=Array{Int,2}(undef,Ndimension,NtypeofMaterialVariables)
 
-    # the last coordinate should be cosidered as time
+    # the last coordinate should be cosidered as time ANYWAYS
     if !timeMarching
+        Ndimension+=1
         localPointsIndices=CartesianIndices(Tuple([car2vec(localPointsIndices[end]);1]))
         middlepoint=CartesianIndex([car2vec(middlepoint);1]...)
         tmpT=Symbolics.variable(timeDimensionString)
-        coordinates = (coordinates...,tmpT)
         modelPoints = (modelPoints...,1)
     end
+
+
     
     
+
     for iVar ∈ 1:NtypeofMaterialVariables
-        if sum(CD_v[:,iVar]) == 0 # when it is a constant
+        CartesianDependency=lhs.CartesianDependencies[:,iVar]
+        if ndims(models[iVar]) === CartesianDependencies
+            @error "model parameter dimension is not what you declared in the equation!"
+        end
+        if sum(CartesianDependency) == 0 # when it is a constant
             tmpModel=Array{Any,Ndimension}(undef,(ones(Int, Ndimension)...)...)
             ModelPoints[:,iVar] = ones(Int, Ndimension)
             tmpModel[vec2car(ones(Int, Ndimension))] = models[iVar]

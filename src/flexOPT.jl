@@ -25,6 +25,7 @@ module flexOPT
     # famous equations etc.
 
     include("../src/motorsOPT/others.jl")
+    export timeDimensionString
     include("../src/motorsOPT/famousEquations.jl")
     include("../src/motorsOPT/famousSourceFunctions.jl")
 
