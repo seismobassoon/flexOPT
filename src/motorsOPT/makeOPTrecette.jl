@@ -37,8 +37,9 @@ function makeOPTsemiSymbolic(params::Dict)
     #
     nodes=configsTaylorμ.availablePointsConfigurations
     centresIndices=configsTaylorμ.centrePointConfigurations
-    timeMarching=numbersOfTheSystem.timeMarching
-    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem,timeMarching=timeMarching)
+    nConfigurations=size(nodes)
+    numbersOfTheSystem=(numbersOfTheSystem...,nConfigurations=nConfigurations)
+    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem)
     return @strdict(recette)
 
 end

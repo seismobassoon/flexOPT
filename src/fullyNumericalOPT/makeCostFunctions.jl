@@ -31,15 +31,17 @@ function quasiNumericalOperatorConstruction(optRec)
     #
     #endregion
 
-
-    timeMarching=optRec["recette"].timeMarching
-    Av=optRec["recette"].lhs.AjiννᶜU
-    varM=optRec["recette"].lhs.varM
-    Γg=optRec["recette"].rhs.ΓjiννᶜF
-    varF=optRec["recette"].rhs.varF
-    nodes=optRec["recette"].nodes
-    centresIndices=optRec["recette"].centresIndices
-    nGeometry=length(centresIndices) # normally the geometry configurations should be proposed in the preferred order
+    recette =optRec["recette"]
+    
+    Av=recette.lhs.AjiννᶜU
+    varM=recette.lhs.varM
+    Γg=recette.rhs.ΓjiννᶜF
+    varF=recette.rhs.varF
+    nodes=recette.nodes
+    centresIndices=recette.centresIndices
+    numbersOfTheSystem=recette.numbersOfTheSystem
+    timeMarching=numbersOfTheSystem.timeMarching
+    nGeometry=numbersOfTheSystem.nGeometry # normally the geometry configurations should be proposed in the preferred order
 
 
     
