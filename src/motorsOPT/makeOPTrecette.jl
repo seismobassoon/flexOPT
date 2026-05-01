@@ -17,19 +17,20 @@ function makeOPTsemiSymbolic(params::Dict)
     TaylorOptionsμᶜ=TaylorOptions(materItpl,supplementaryOrder)
 
     equationCharacteristics,equationCharacteristicsForce=famousEquations(famousEquationType)
-
+    fields=equationCharacteristics.fields
+    extfields=equationCharacteristicsForce.fields
     # compact coefficients for l.h.s. of the equation
     equationCharacteristics=equationCharacteristics
-    numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    numbersOfTheSystemL=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystemL,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Ajiννᶜ,AjiννᶜU,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     lhs=(Ajiννᶜ=Ajiννᶜ,AjiννᶜU=AjiννᶜU,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
 
     # compact coefficients for r.h.s. of the equation
     equationCharacteristics=equationCharacteristicsForce
-    numbersOfTheSystem=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    numbersOfTheSystemR=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystemR,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Γjiννᶜ,ΓjiννᶜF,Flocal =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     rhs=(Γjiννᶜ=Γjiννᶜ,ΓjiννᶜF=ΓjiννᶜF,Flocal=Flocal,varF=varM,CartesianDependencies=CartesianDependencies)
@@ -37,9 +38,10 @@ function makeOPTsemiSymbolic(params::Dict)
     #
     nodes=configsTaylorμ.availablePointsConfigurations
     centresIndices=configsTaylorμ.centrePointConfigurations
-    nConfigurations=size(nodes)
-    numbersOfTheSystem=(numbersOfTheSystem...,nConfigurations=nConfigurations)
-    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem)
+    nConfigurations=size(nodes)[1]
+    numbersOfTheSystem=(numbersOfTheSystemL=numbersOfTheSystemL,numbersOfTheSystemR=numbersOfTheSystemR,nConfigurations=nConfigurations)
+    fieldNames=(fields=fields, extfields=extfields)
+    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem,fieldNames=fieldNames)
     return @strdict(recette)
 
 end
