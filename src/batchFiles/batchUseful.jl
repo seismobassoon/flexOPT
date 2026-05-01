@@ -69,7 +69,7 @@ carDropDim(x::CartesianIndex) = CartesianIndex(Tuple(car2vec(x)[1:end-1]))
 carAddDim(x::CartesianIndex,n::Int) = CartesianIndex(Tuple([car2vec(x);n]))
 vec2car(x::Array{Int})=CartesianIndex(Tuple(vec(x))) 
 svec2car(v::SVector{N,T}) where {N,T} = CartesianIndex(Tuple(v))
-
+svec2car(vs::AbstractVector{<:SVector}) = [CartesianIndex(Tuple(v)) for v in vs]
 function flatten(x)
     if isa(x, AbstractVector)
         return vcat(flatten.(x)...)
