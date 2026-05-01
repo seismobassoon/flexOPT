@@ -22,7 +22,8 @@ function makeOPTsemiSymbolic(params::Dict)
     # compact coefficients for l.h.s. of the equation
     equationCharacteristics=equationCharacteristics
     numbersOfTheSystemL=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystemL,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    numbersOfTheSystem = numbersOfTheSystemL
+    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Ajiννᶜ,AjiννᶜU,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     lhs=(Ajiννᶜ=Ajiννᶜ,AjiννᶜU=AjiννᶜU,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
@@ -30,7 +31,8 @@ function makeOPTsemiSymbolic(params::Dict)
     # compact coefficients for r.h.s. of the equation
     equationCharacteristics=equationCharacteristicsForce
     numbersOfTheSystemR=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
-    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystemR,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    numbersOfTheSystem = numbersOfTheSystemR
+    _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
     Γjiννᶜ,ΓjiννᶜF,Flocal =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     rhs=(Γjiννᶜ=Γjiννᶜ,ΓjiννᶜF=ΓjiννᶜF,Flocal=Flocal,varF=varM,CartesianDependencies=CartesianDependencies)
