@@ -1,5 +1,16 @@
-
 function quasiNumericalOperatorConstruction(optRec,modelFam;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
+    costLHS=quasiNumericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
+    costRHS=quasiNumericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
+    costfunctions=costLHS.costFunctions-costRHS.costFunctions
+    fieldLHS=costLHS.場
+    fieldRHS=costRHS.場
+    champsLimité=costRHS.場
+    return costfunctions,fieldLHS,fieldRHS,champsLimité
+end
+
+
+
+function quasiNumericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
 
     #region general introduction
     #
@@ -35,15 +46,23 @@ function quasiNumericalOperatorConstruction(optRec,modelFam;absorbingBoundaries=
 
 
     @unpack lhs, rhs, nodes, centresIndices, numbersOfTheSystem,fieldNames=optRec["recette"]
-    symA=lhs.Ajiννᶜ
-    varM=lhs.varM
-    Ulocal=lhs.Ulocal
-    
-    symΓ=rhs.Γjiννᶜ
-    varF=rhs.varF
-    Flocal=rhs.Flocal
 
     @unpack fields, extfields = fieldNames
+
+    fields = nothing
+    if side=="left"
+        symA=lhs.Ajiννᶜ
+        varM=lhs.varM
+        Ulocal=lhs.Ulocal
+        fields=fields
+    elseif side=="right"
+        symA=rhs.Γjiννᶜ
+        varM=rhs.varF
+        Ulocal=rhs.Flocal
+        fields=extfields
+    end
+
+    
 
     @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
     NtypeofExtFields=numbersOfTheSystem.numbersOfTheSystemL.NtypeofFields
