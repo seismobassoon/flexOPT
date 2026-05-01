@@ -3,6 +3,7 @@ function quasiNumericalOperatorConstruction(optRec)
 
     #region general introduction
     #
+    # 01/05/2026 Nobuaki Fuji
     #
     # after the construction of local (semi-)symbolic expressions with linearised operators#
     # here we will read the model parameters and construct the numerical operators
@@ -30,14 +31,18 @@ function quasiNumericalOperatorConstruction(optRec)
     #
     #endregion
 
+
     timeMarching=optRec["recette"].timeMarching
     Av=optRec["recette"].lhs.AjiννᶜU
     varM=optRec["recette"].lhs.varM
     Γg=optRec["recette"].rhs.ΓjiννᶜF
     varF=optRec["recette"].rhs.varF
-    #nodes=optRec["recette"].nodes
+    nodes=optRec["recette"].nodes
+    centresIndices=optRec["recette"].centresIndices
+    nGeometry=length(centresIndices) # normally the geometry configurations should be proposed in the preferred order
 
-    @show 
+
+    
 
 end
 
