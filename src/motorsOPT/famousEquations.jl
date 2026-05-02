@@ -72,7 +72,7 @@ function famousEquation(::Val{:eq_1DsismoFreqHomo})
 
     extexprs=f
     extfields=f
-    extvars=1
+    extvars=f
     coordinates =(x)
     ∂, ∂² = usefulPartials(coordinates)
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
@@ -150,7 +150,7 @@ function famousEquation(::Val{:eq_1DpoissonHetero})
 
     extexprs=f
     extfields=f
-    extvars=1
+    extvars=f
     coordinates =(x)
     ∂, ∂² = usefulPartials(coordinates)
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
