@@ -252,7 +252,7 @@ function famousEquation(::Val{:eq_2DacousticTime})
 
     extexprs = f
     extfields = f
-    extvars = 1
+    extvars = f
     coordinates =(x,y,t)
     ∂, ∂² = usefulPartials(coordinates)
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
