@@ -140,7 +140,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     end
     
     #endregion
-    @show Models, ModelPoints
+    
 
 
     
