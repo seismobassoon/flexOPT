@@ -37,6 +37,8 @@ module flexOPT
 
     include("../src/numSolvers/timeMarchingSchemes.jl")
     include("../src/numSolvers/diffTools.jl")
+    export prepareNumericalOperators,timeMarchingSchemePrepared
+
 
     export getModelPoints,quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
 
