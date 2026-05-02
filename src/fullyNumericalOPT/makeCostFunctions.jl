@@ -125,11 +125,11 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
             tmpModel[vec2car(ones(Int, newD))] = models[iVar]
             Models[iVar]=tmpModel
         else
-            @show size(models[iVar])
-            @show newCoords=expandVectors(size(models[iVar]),CartesianDependency)
-            @show ModelPoints[:,iVar] = newCoords
-            @show tmpModel=reshape(models[iVar],newCoords...)
-            @show Models[iVar]=tmpModel
+            size(models[iVar])
+            newCoords=expandVectors(size(models[iVar]),CartesianDependency)
+            ModelPoints[:,iVar] = newCoords
+            tmpModel=reshape(models[iVar],newCoords...)
+            Models[iVar]=tmpModel
 
             for iCoord in eachindex(newCoords)
                 if newCoords[iCoord]!== modelPoints[iCoord] && newCoords[iCoord] !== 1

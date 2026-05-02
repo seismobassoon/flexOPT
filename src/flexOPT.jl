@@ -34,10 +34,10 @@ module flexOPT
     include("fullyNumericalOPT/makeCostFunctions.jl")
     export numericalOperatorConstruction
 
-
+    include("../src/numSolvers/linearSolution.jl")
     include("../src/numSolvers/timeMarchingSchemes.jl")
     include("../src/numSolvers/diffTools.jl")
-    export prepareNumericalOperators,timeMarchingSchemePrepared
+    export prepareNumericalOperators,timeMarchingSchemePrepared,prepareLinearSystem,evaluateLinearSystem!,evaluateLinearSystem,timeMarchingSchemeLinear
 
 
     export getModelPoints,quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
