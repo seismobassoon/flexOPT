@@ -541,87 +541,90 @@ done_lock = ReentrantLock()
 
 Threads.@threads for k in eachindex(jobs)
     job = jobs[k]
+    result = run_one_job(job, nameConfigs, cases, modelFamily, forceFamily, famousEquationType, figdir)
+
+    lock(misfit_lock) do
+        misfit[result.iH, result.iCase, result.iConfigUsed] = result.misfit_value
+        done[result.iH, result.iCase, result.iConfigUsed] = true
+        jldsave(checkpoint_file; misfit=misfit, done=done)
+    end
+end
+
+
+
+
+
+end
+
+
+function run_one_job(job, nameConfigs, cases, modelFamily, forceFamily, famousEquationType, figdir)
     iH = job.iH
     iCase = job.iCase
     iConfigUsed = job.iConfigUsed
 
-    if done[iH, iCase, iConfigUsed]
-        continue
-    end
+    name, T, β = cases[iCase]
+    iExperiment = (iH=iH, iCase=iCase, iPointsUsed=iConfigUsed)
 
-    try
-        name, T, β = cases[iCase]
-        iExperiment = (iH=iH, iCase=iCase, iPointsUsed=iConfigUsed)
+    symbols_here = modelFamily[iH, iCase, iConfigUsed].symbols
+    Nx = symbols_here.Nx
+    Δx = symbols_here.Δx
+    X = symbols_here.X
+    q = symbols_here.q
+    qₓ = symbols_here.qₓ
+    T = symbols_here.T
+    β = symbols_here.β
 
-        println("Thread $(threadid()) starting iH=$iH iCase=$iCase iConfig=$iConfigUsed")
-        flush(stdout)
+    cfg = nameConfigs[iConfigUsed]
+    configNameTmp = cfg.name
+    orderBtime = cfg.orderBtime
+    orderBspace = cfg.orderBspace
+    pointsInSpace = cfg.pointsInSpace
+    pointsInTime = cfg.pointsInTime
+    supplementaryOrder = cfg.supplementaryOrder
+    fieldItpl = cfg.fieldItpl
+    materItpl = cfg.materItpl
 
-        @unpack Nx, Δx, X, q, qₓ, T, β = modelFamily[iH, iCase, iConfigUsed].symbols
-        cfg = nameConfigs[iConfigUsed]
-        configNameTmp = cfg.name
-        @unpack orderBtime, orderBspace, pointsInSpace, pointsInTime, supplementaryOrder, fieldItpl, materItpl = cfg
+    concreteParametersForOPTConstruction = @strdict famousEquationType Δ=modelFamily[iH,iCase,iConfigUsed].Δ orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
+    optRec = myProduceOrLoad(makeOPTsemiSymbolic, concreteParametersForOPTConstruction, "semiSymbolic")
 
-        concreteParametersForOPTConstruction = @strdict famousEquationType Δ=modelFamily[iH,iCase,iConfigUsed].Δ orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
-        optRec = myProduceOrLoad(makeOPTsemiSymbolic, concreteParametersForOPTConstruction, "semiSymbolic")
+    params = @strdict optRec=optRec modelFam=modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed] absorbingBoundaries=nothing maskedRegionInSpace=nothing
+    numOpt = numericalOperatorConstruction(params)
+    numOps = numOpt["numOperators"]
+    preparedLin = prepareLinearSystem(numOps)
 
-        params = @strdict optRec=optRec modelFam=modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed] absorbingBoundaries=nothing maskedRegionInSpace=nothing
-        numOpt = numericalOperatorConstruction(params)
-        numOps = numOpt["numOperators"]
-        preparedLin = prepareLinearSystem(numOps)
+    sourceFull = forceFamily[iH, iCase, iConfigUsed]
 
-        sourceFull = forceFamily[iExperiment.iH, iExperiment.iCase, iExperiment.iPointsUsed]
+    syntheticData = timeMarchingSchemeLinear(
+        preparedLin,
+        1,
+        modelFamily[iH,iCase,iConfigUsed].Δ,
+        modelFamily[iH,iCase,iConfigUsed].modelName;
+        videoMode=false,
+        sourceType="Explicit",
+        sourceFull=sourceFull,
+        iExperiment=iExperiment,
+        boundaryConditionForced=true,
+    )
 
-        syntheticData = timeMarchingSchemeLinear(
-            preparedLin,
-            1,
-            modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed].Δ,
-            modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed].modelName;
-            videoMode=false,
-            sourceType="Explicit",
-            sourceFull=sourceFull,
-            iExperiment=iExperiment,
-            boundaryConditionForced=true,
-        )
+    syntheticData = reduce(vcat, syntheticData)
+    analyticalData = [Symbolics.value(substitute(T, Dict(x => X[i]))) for i in 1:Nx]
+    misfit_value = norm(syntheticData - analyticalData) / Nx
 
-        syntheticData = reduce(vcat, syntheticData)
-        analyticalData = [Symbolics.value(substitute(T, Dict(x => X[i]))) for i in 1:Nx]
-        misfit_value = norm(syntheticData - analyticalData) / Nx
-
-        fig = Figure()
-        ax = Axis(
-            fig[1, 1],
-            title = "model=$(cases[iCase].name), $(configNameTmp)",
-            xlabel = "x",
-            ylabel = "solution",
-        )
-        lines!(ax, X, analyticalData, color=:blue, label="analytical")
-        scatter!(ax, X, syntheticData, color=:red, marker=:circle, label="synthetic")
-        axislegend(ax)
-
-        figfile = joinpath(
-            figdir,
-            "cmp_iH$(iH)_iCase$(iCase)_iConfig$(iConfigUsed)_obs$(orderBspace)_obt$(orderBtime)_pts$(pointsInSpace)_supp$(supplementaryOrder).png",
-        )
-        save(figfile, fig)
-
-        lock(misfit_lock) do
-            misfit[iH, iCase, iConfigUsed] = misfit_value
-            done[iH, iCase, iConfigUsed] = true
-            jldsave(checkpoint_file; misfit=misfit, done=done)
-        end
-
-    catch err
-        @warn "Failed at (iH=$iH, iCase=$iCase, iConfigUsed=$iConfigUsed)" exception=(err, catch_backtrace())
-        lock(done_lock) do
-            jldsave(checkpoint_file; misfit=misfit, done=done)
-        end
-    end
+    return (
+        iH = iH,
+        iCase = iCase,
+        iConfigUsed = iConfigUsed,
+        misfit_value = misfit_value,
+        X = X,
+        analyticalData = analyticalData,
+        syntheticData = syntheticData,
+        configNameTmp = configNameTmp,
+        orderBtime = orderBtime,
+        orderBspace = orderBspace,
+        pointsInSpace = pointsInSpace,
+        supplementaryOrder = supplementaryOrder,
+    )
 end
 
-
-
-
-
-end
 
 main()
