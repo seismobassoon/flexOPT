@@ -207,6 +207,7 @@ function timeMarchingSchemePrepared(
     initialCondition=0.0,
     sourceFull=nothing,
     iExperiment=nothing,
+    boundaryConditionForced=false,
 )
     if !isdir(datadir("fieldResults"))
         mkdir(datadir("fieldResults"))
@@ -272,7 +273,7 @@ function timeMarchingSchemePrepared(
                 knownForce .= sourceFull[:, :, it:it+timePointsUsedForOneStep-1]
             end
 
-            timeStepOptimisationPrepared!(residual!, unknownField, knownField, knownForce, J, cache, F)
+            timeStepOptimisationPrepared!(residual!, unknownField, knownField, knownForce, J, cache, F; boundaryConditionForced=boundaryConditionForced)
 
             if NknownTime > 0
                 if NknownTime > 1
