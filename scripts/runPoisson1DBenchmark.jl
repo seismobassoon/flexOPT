@@ -1,6 +1,16 @@
+#julia --project=../ -t auto /Users/nobuaki/Documents/Github/flexOPT/scripts/runPoisson1DBenchmark.jl
+
+
+
+using Base.Threads
+
+
+
 using Pkg
 using Metal
 
+using Symbolics,CairoMakie,LinearAlgebra
+using JLD2, LinearAlgebra
 cd(@__DIR__)
 Pkg.activate("../")
 ParamFile = "../config/testparam.csv"  # maybe GeoPoints and planet1D should be fusioned
@@ -16,6 +26,8 @@ include("../src/GeoPoints.jl")
 include("../src/flexOPT.jl")
 
 using .commonBatchs, .planet1D, .GeoPoints, .flexOPT
+
+function main()
 
 
 nameConfigs = NamedTuple[]
@@ -422,7 +434,6 @@ push!(nameConfigs, (
 
 nConfigurations=length(nameConfigs)
 
-using Symbolics,CairoMakie,LinearAlgebra
 CairoMakie.activate!()
 
 logsOfHinverse = [0.5*i for i in 0:6] #[1.0*i for i in 0:4]
@@ -458,7 +469,7 @@ for iCase ∈ eachindex(cases)
     lines!(ax, X, model)
 end
 ylims!(ax, 0, 5)
-display(fig)
+#display(fig)
 Nx=nothing
 Δx=nothing
 iH=nothing
@@ -496,7 +507,18 @@ end
 famousEquationType="1DpoissonHetero" 
 
 
-using JLD2, LinearAlgebra
+
+
+
+jobs = [
+    (iH=iH, iCase=iCase, iConfigUsed=iConfigUsed)
+    for iConfigUsed in eachindex(nameConfigs)
+    for iCase in eachindex(cases)
+    for iH in eachindex(logsOfHinverse)
+]
+
+
+
 
 checkpoint_file = "misfit_checkpoint_smaller.jld2"
 figdir = joinpath(pwd(), "tmp", "figures")
@@ -512,39 +534,42 @@ else
     done = falses(length(logsOfHinverse), length(cases), nConfigurations)
 end
 
-for iConfigUsed in eachindex(nameConfigs), iCase in eachindex(cases), iH in eachindex(logsOfHinverse)
+
+
+misfit_lock = ReentrantLock()
+done_lock = ReentrantLock()
+
+Threads.@threads for k in eachindex(jobs)
+    job = jobs[k]
+    iH = job.iH
+    iCase = job.iCase
+    iConfigUsed = job.iConfigUsed
+
     if done[iH, iCase, iConfigUsed]
         continue
     end
-    #if iH*iCase >1
-    #    continue
-    #end
-
-    
-
 
     try
         name, T, β = cases[iCase]
         iExperiment = (iH=iH, iCase=iCase, iPointsUsed=iConfigUsed)
 
+        println("Thread $(threadid()) starting iH=$iH iCase=$iCase iConfig=$iConfigUsed")
+        flush(stdout)
+
         @unpack Nx, Δx, X, q, qₓ, T, β = modelFamily[iH, iCase, iConfigUsed].symbols
         cfg = nameConfigs[iConfigUsed]
-        configNameTmp=cfg.name
+        configNameTmp = cfg.name
         @unpack orderBtime, orderBspace, pointsInSpace, pointsInTime, supplementaryOrder, fieldItpl, materItpl = cfg
-        #@unpack orderBtime, orderBspace, pointsInSpace, pointsInTime, supplementaryOrder, fieldItpl, materItpl = all_Configcases[iConfigUsed]
 
         concreteParametersForOPTConstruction = @strdict famousEquationType Δ=modelFamily[iH,iCase,iConfigUsed].Δ orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
         optRec = myProduceOrLoad(makeOPTsemiSymbolic, concreteParametersForOPTConstruction, "semiSymbolic")
 
         params = @strdict optRec=optRec modelFam=modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed] absorbingBoundaries=nothing maskedRegionInSpace=nothing
         numOpt = numericalOperatorConstruction(params)
-
         numOps = numOpt["numOperators"]
-        #prepared = prepareNumericalOperators(numOps)
         preparedLin = prepareLinearSystem(numOps)
 
-
-        sourceFull = forceFamily[iExperiment.iH, iExperiment.iCase, iExperiment.iPointsUsed]        
+        sourceFull = forceFamily[iExperiment.iH, iExperiment.iCase, iExperiment.iPointsUsed]
 
         syntheticData = timeMarchingSchemeLinear(
             preparedLin,
@@ -558,25 +583,9 @@ for iConfigUsed in eachindex(nameConfigs), iCase in eachindex(cases), iH in each
             boundaryConditionForced=true,
         )
 
-
-
-        #syntheticData = timeMarchingSchemePrepared(
-        #    prepared,
-        #    1,
-        #    modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed].Δ,
-        #    modelFamily[iExperiment.iH,iExperiment.iCase,iExperiment.iPointsUsed].modelName;
-        #    videoMode=false,
-        #    sourceType="Explicit",
-        #    sourceFull=sourceFull,
-        #    iExperiment=iExperiment,
-        #    boundaryConditionForced=true,
-        #)
-
         syntheticData = reduce(vcat, syntheticData)
         analyticalData = [Symbolics.value(substitute(T, Dict(x => X[i]))) for i in 1:Nx]
-
-        misfit[iH, iCase, iConfigUsed] = norm(syntheticData - analyticalData) / Nx
-        done[iH, iCase, iConfigUsed] = true
+        misfit_value = norm(syntheticData - analyticalData) / Nx
 
         fig = Figure()
         ax = Axis(
@@ -595,10 +604,24 @@ for iConfigUsed in eachindex(nameConfigs), iCase in eachindex(cases), iH in each
         )
         save(figfile, fig)
 
-        jldsave(checkpoint_file; misfit=misfit, done=done)
+        lock(misfit_lock) do
+            misfit[iH, iCase, iConfigUsed] = misfit_value
+            done[iH, iCase, iConfigUsed] = true
+            jldsave(checkpoint_file; misfit=misfit, done=done)
+        end
 
     catch err
         @warn "Failed at (iH=$iH, iCase=$iCase, iConfigUsed=$iConfigUsed)" exception=(err, catch_backtrace())
-        jldsave(checkpoint_file; misfit=misfit, done=done)
+        lock(done_lock) do
+            jldsave(checkpoint_file; misfit=misfit, done=done)
+        end
     end
 end
+
+
+
+
+
+end
+
+main()
