@@ -1,5 +1,13 @@
 using Symbolics
 using SparseArrays
+using LinearAlgebra
+using JLD2
+using DrWatson
+
+# Optional plotting support inside timeMarchingSchemeLinear
+# Uncomment if you want videoMode=true.
+# using CairoMakie
+# CairoMakie.activate!()
 
 function prepareLinearSystem(numOperators; T=Float64)
     @unpack costfunctions, fieldLHS, fieldRHS, champsLimité = numOperators
@@ -49,7 +57,7 @@ function prepareLinearSystem(numOperators; T=Float64)
             end
         end
     else
-        NforcePoints = length(champsLimité[1,1])
+        NforcePoints = length(champsLimité[1, 1])
         symbKnownForce = Array{Num,3}(undef, NforcePoints, NField, timePointsUsedForOneStep)
         for iT in 1:timePointsUsedForOneStep
             for iField in 1:NField
@@ -65,11 +73,10 @@ function prepareLinearSystem(numOperators; T=Float64)
     knownForceInputs = vec(symbKnownForce)
     knownInputs = vcat(knownFieldInputs, knownForceInputs)
 
-    # Symbolic linear system:
-    # residual r(u) = A*u + c
-    # solve A*u = -c
+    # residual = A*u + c  =>  A*u = -c
     A_sym = Symbolics.jacobian(costvec, unknownInputs)
-    c_sym = Symbolics.substitute.(costvec, Ref(Dict(u => 0 for u in unknownInputs)))
+    zero_map = Dict(u => 0 for u in unknownInputs)
+    c_sym = Symbolics.substitute.(costvec, Ref(zero_map))
     b_sym = .-c_sym
 
     A_expr = build_function(vec(A_sym), knownInputs; expression=Val(false))
@@ -110,28 +117,73 @@ function prepareLinearSystem(numOperators; T=Float64)
     )
 end
 
+function makeLinearEvaluator(prepared)
+    nKnownField = length(prepared.known_lhs_template)
+    nKnownForce = length(prepared.known_rhs_template)
+    knownInputs = zeros(eltype(prepared.b_template), nKnownField + nKnownForce)
+
+    function eval!(A, b, knownField, knownForce)
+        knownInputs[1:nKnownField] .= vec(knownField)
+        knownInputs[nKnownField+1:nKnownField+nKnownForce] .= vec(knownForce)
+
+        prepared.A_fun!(vec(A), knownInputs)
+        prepared.b_fun!(b, knownInputs)
+        return A, b
+    end
+
+    return eval!
+end
+
 function evaluateLinearSystem(prepared, knownField, knownForce; sparse_output=false)
-    knownInputs = vcat(vec(knownField), vec(knownForce))
+    eval! = makeLinearEvaluator(prepared)
+    A = copy(prepared.A_template)
+    b = copy(prepared.b_template)
+    eval!(A, b, knownField, knownForce)
+    if sparse_output
+        A = sparse(A)
+    end
+    return A, b
+end
 
-    Avec = prepared.A_fun(knownInputs)
-    b = prepared.b_fun(knownInputs)
+function applyBoundaryConditionForced!(A, b; leftValue=1.0, rightValue=1.0)
+    A[1, :] .= 0
+    A[1, 1] = 1
+    b[1] = leftValue
 
-    A = reshape(Avec, size(prepared.A_template))
+    A[end, :] .= 0
+    A[end, end] = 1
+    b[end] = rightValue
+
+    return A, b
+end
+
+function prepareConstantMatrix(preparedLin;
+    boundaryConditionForced=false,
+    sparse_output=true,
+    leftValue=1.0,
+    rightValue=1.0,
+)
+    eval! = makeLinearEvaluator(preparedLin)
+
+    knownField0 = zero(preparedLin.known_lhs_template)
+    knownForce0 = zero(preparedLin.known_rhs_template)
+
+    A = copy(preparedLin.A_template)
+    btmp = copy(preparedLin.b_template)
+
+    eval!(A, btmp, knownField0, knownForce0)
 
     if sparse_output
         A = sparse(A)
     end
 
-    return A, b
-end
+    if boundaryConditionForced
+        applyBoundaryConditionForced!(A, btmp; leftValue=leftValue, rightValue=rightValue)
+    end
 
-function evaluateLinearSystem!(A, b, prepared, knownField, knownForce)
-    knownInputs = vcat(vec(knownField), vec(knownForce))
-    prepared.A_fun!(vec(A), knownInputs)
-    prepared.b_fun!(b, knownInputs)
-    return A, b
+    factor = lu(A)
+    return A, factor
 end
-
 
 function timeMarchingSchemeLinear(
     preparedLin,
@@ -147,6 +199,7 @@ function timeMarchingSchemeLinear(
     iExperiment=nothing,
     sparse_output=true,
     boundaryConditionForced=false,
+    assume_constant_matrix=true,
 )
     if !isdir(datadir("fieldResults"))
         mkdir(datadir("fieldResults"))
@@ -192,6 +245,7 @@ function timeMarchingSchemeLinear(
         fieldFile = jldopen(sequentialFileName, "w")
 
         hm = nothing
+        fig = nothing
         if videoMode
             fig = Figure()
             ax = Axis(fig[1, 1])
@@ -200,8 +254,18 @@ function timeMarchingSchemeLinear(
             display(fig)
         end
 
+        eval! = makeLinearEvaluator(preparedLin)
+        Awork = copy(preparedLin.A_template)
+        b = copy(preparedLin.b_template)
+
         factor = nothing
-        Aprev = nothing
+        if assume_constant_matrix
+            _, factor = prepareConstantMatrix(
+                preparedLin;
+                boundaryConditionForced=boundaryConditionForced,
+                sparse_output=sparse_output,
+            )
+        end
 
         for it in itVec
             if sourceType == "Ricker"
@@ -211,14 +275,19 @@ function timeMarchingSchemeLinear(
                 knownForce .= sourceFull[:, :, it:it+timePointsUsedForOneStep-1]
             end
 
-            A, b = evaluateLinearSystem(preparedLin, knownField, knownForce; sparse_output=sparse_output)
-            if boundaryConditionForced
-                applyBoundaryConditionForced!(A, b; leftValue=1.0, rightValue=1.0)
-            end
-
-            if it == 1 || Aprev === nothing || A != Aprev
+            if assume_constant_matrix
+                preparedLin.b_fun!(b, vcat(vec(knownField), vec(knownForce)))
+                if boundaryConditionForced
+                    b[1] = 1.0
+                    b[end] = 1.0
+                end
+            else
+                eval!(Awork, b, knownField, knownForce)
+                A = sparse_output ? sparse(Awork) : copy(Awork)
+                if boundaryConditionForced
+                    applyBoundaryConditionForced!(A, b; leftValue=1.0, rightValue=1.0)
+                end
                 factor = lu(A)
-                Aprev = A
             end
 
             u = factor \ b
@@ -251,18 +320,4 @@ function timeMarchingSchemeLinear(
     jldsave(compactFileName; acompact=acompact)
 
     return acompact
-end
-
-function applyBoundaryConditionForced!(A, b; leftValue=1.0, rightValue=1.0)
-    n = length(b)
-
-    A[1, :] .= 0
-    A[1, 1] = 1
-    b[1] = leftValue
-
-    A[end, :] .= 0
-    A[end, end] = 1
-    b[end] = rightValue
-
-    return A, b
 end
