@@ -1,7 +1,7 @@
 function numericalOperatorConstruction(params::Dict)
     @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
-    costLHS=quasiNumericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
-    costRHS=quasiNumericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
+    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
+    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
     costfunctions=costLHS.costFunctions-costRHS.costFunctions
     fieldLHS=costLHS.場
     fieldRHS=costRHS.場
@@ -67,8 +67,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     
 
     @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
-    NtypeofExtFields=numbersOfTheSystem.numbersOfTheSystemL.NtypeofFields
-    NtypeofExtMaterialVariables=numbersOfTheSystem.numbersOfTheSystemR.NtypeofMaterialVariables
+  
     nConfigurations=numbersOfTheSystem.nConfigurations
     # normally the geometry configurations should be proposed in the preferred order
     nGeometry=nConfigurations
@@ -196,7 +195,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     for it ∈ 1:activeTimePoints
         for iField ∈ 1:NtypeofFields
-            newstring = split(string(fields[iField]), "(")[1] * "_mod_t=" * string(it)
+            newstring = side*"_"*string(iField) * "_t_" * string(it)
             場[iField, it] = Symbolics.variables(
                 Symbol(newstring),
                 Base.OneTo.(Tuple(wholeRegionPointsSpace))...

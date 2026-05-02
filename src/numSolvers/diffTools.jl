@@ -214,5 +214,5 @@ end
 
 
 # detection of backend
-_has_cuda, _has_metal = detect_backend()
+#_has_cuda, _has_metal = detect_backend()
 
