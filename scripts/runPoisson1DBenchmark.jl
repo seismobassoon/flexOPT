@@ -561,6 +561,8 @@ function run_one_job(job, nameConfigs, cases, modelFamily, forceFamily, famousEq
     iH = job.iH
     iCase = job.iCase
     iConfigUsed = job.iConfigUsed
+    println("Start iH=$iH iCase=$iCase iConfig=$iConfigUsed")
+    flush(stdout)
 
     name, T, β = cases[iCase]
     iExperiment = (iH=iH, iCase=iCase, iPointsUsed=iConfigUsed)

@@ -131,7 +131,7 @@ function famousEquation(::Val{:eq_1DsismoTime})
 
     extexprs=f
     extfields=f
-    extvars=1
+    extvars=f
 
     coordinates =(x,t)
     ∂, ∂² = usefulPartials(coordinates)
