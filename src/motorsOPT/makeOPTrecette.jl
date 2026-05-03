@@ -19,13 +19,14 @@ function makeOPTsemiSymbolic(params::Dict)
     equationCharacteristics,equationCharacteristicsForce=famousEquations(famousEquationType)
     fields=equationCharacteristics.fields
     extfields=equationCharacteristicsForce.fields
+
     # compact coefficients for l.h.s. of the equation
     equationCharacteristics=equationCharacteristics
     numbersOfTheSystemL=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     numbersOfTheSystem = numbersOfTheSystemL
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
-    #@show ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ
+
     Ajiννᶜ,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     lhs=(Ajiννᶜ=Ajiννᶜ,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
 
@@ -66,10 +67,12 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     @unpack multiOrdersIndices,availablePointsConfigurations,centrePointConfigurations,availableμPoints,availableμaxes, numberGeometries = configsTaylorμ
     availableμᶜPoints = configsTaylorμᶜ.availableμPoints
     availableμᶜaxes = configsTaylorμᶜ.availableμaxes
+    
+    #@show availableμᶜPoints, availableμPoints
+
     orderBspline = ordersForSplinesμ.orderBspline
     YorderBsplineμ = ordersForSplinesμ.YorderBspline
     YorderBsplineμᶜ= ordersForSplinesμᶜ.YorderBspline
-    #nCoordinates = nCoordinates isa Val ? nCoordinates.val : nCoordinates
 
     #for iConfigGeometry ∈ 1:numberGeometries
     nGeometry = numberGeometries

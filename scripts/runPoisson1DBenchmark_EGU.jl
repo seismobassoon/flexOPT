@@ -51,21 +51,41 @@ push!(nameConfigs, (
     ),
 ))
 
+
 push!(nameConfigs, (
-    name = "convFD4",
+    name = "FD2_staggered",
     orderBtime = 1,
     orderBspace = -1,
-    pointsInSpace = 4,
+    pointsInSpace = 2,
     pointsInTime = 1,
     supplementaryOrder = 0,
     fieldItpl = (
         ptsSpace = 1, ptsTime = 1,
-        offsetSpace = 1.0, offsetTime = 1,
+        offsetSpace = 0, offsetTime = 1,
+        YorderBspace = 0, YorderBtime = 1,
+    ),
+    materItpl = (
+        ptsSpace = 3, ptsTime = 1,
+        offsetSpace = -0.5, offsetTime = 1,
+        YorderBspace = 0, YorderBtime = 1,
+    ),
+))
+
+push!(nameConfigs, (
+    name = "convFD5",
+    orderBtime = 1,
+    orderBspace = -1,
+    pointsInSpace = 5,
+    pointsInTime = 1,
+    supplementaryOrder = 0,
+    fieldItpl = (
+        ptsSpace = 1, ptsTime = 1,
+        offsetSpace = 2.0, offsetTime = 1,
         YorderBspace = -1, YorderBtime = 1,
     ),
     materItpl = (
         ptsSpace = 1, ptsTime = 1,
-        offsetSpace = 1.0, offsetTime = 1,
+        offsetSpace = 2.0, offsetTime = 1,
         YorderBspace = -1, YorderBtime = 1,
     ),
 ))
@@ -175,7 +195,7 @@ nConfigurations=length(nameConfigs)
 
 CairoMakie.activate!()
 
-logsOfHinverse = [0.5*i for i in 0:4] #[1.0*i for i in 0:4]
+logsOfHinverse = [0.5*i for i in 0:6] #[1.0*i for i in 0:4]
 
 cases=[]
 #prefix="B"*string(tmpOrderBspace)*"_"*"w"*string(tmpWorderBspace)*"_"*string(tmpSupplementaryOrder)*"_"

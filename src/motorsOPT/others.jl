@@ -298,7 +298,10 @@ function investigateDependencies(equationCharacteristics,
                                  trialFunctionsCharacteristics,
                                  TaylorOptionsμ,TaylorOptionsμᶜ)
     dependencies,ordersForSplinesμ,configsTaylorμ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ)
-    _,ordersForSplinesμᶜ,configsTaylorμᶜ= investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμᶜ)
+    #need to change this stuff but for the moment this is the least thing i can do ... (02/05/2026)
+    numbersOfTheSystemTmp = merge(numbersOfTheSystem,(pointsμUsed = numbersOfTheSystem.pointsμᶜUsed,
+        offsetsμUsed = numbersOfTheSystem.offsetsμᶜUsed,),)
+    _,ordersForSplinesμᶜ,configsTaylorμᶜ= investigateDependencies(equationCharacteristics,numbersOfTheSystemTmp,trialFunctionsCharacteristics,TaylorOptionsμᶜ)
     return dependencies,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ
 end
 
@@ -433,9 +436,7 @@ function _investigateDependencies(::Val{N},
         push!(availableμaxes,μaxes)
     end
     
-    # here we use the same bases for fields and materials
-    availableμᶜPoints=availableμPoints
-    availableμᶜaxes=availableμaxes
+    
 
     # ---------------- Outputs ----------------
 
