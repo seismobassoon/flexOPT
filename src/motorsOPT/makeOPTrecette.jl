@@ -13,8 +13,8 @@ function makeOPTsemiSymbolic(params::Dict)
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
 
     # here we can compute the different interpolated Taylor expansion options
-    @show TaylorOptionsμ=TaylorOptions(fieldItpl,supplementaryOrder)
-    @show TaylorOptionsμᶜ=TaylorOptions(materItpl,supplementaryOrder)
+    TaylorOptionsμ=TaylorOptions(fieldItpl,supplementaryOrder)
+    TaylorOptionsμᶜ=TaylorOptions(materItpl,supplementaryOrder)
 
     equationCharacteristics,equationCharacteristicsForce=famousEquations(famousEquationType)
     fields=equationCharacteristics.fields
@@ -25,6 +25,10 @@ function makeOPTsemiSymbolic(params::Dict)
     numbersOfTheSystem = numbersOfTheSystemL
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
+    @show ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ
+
+    
+
     Ajiννᶜ,Ulocal=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
     lhs=(Ajiννᶜ=Ajiννᶜ,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
 
