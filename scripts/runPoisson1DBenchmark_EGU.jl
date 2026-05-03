@@ -53,21 +53,21 @@ push!(nameConfigs, (
 
 
 push!(nameConfigs, (
-    name = "FD2_staggered",
+    name = "OPT2_staggeredlLike",
     orderBtime = 1,
-    orderBspace = -1,
+    orderBspace = 1,
     pointsInSpace = 2,
     pointsInTime = 1,
     supplementaryOrder = 0,
     fieldItpl = (
-        ptsSpace = 1, ptsTime = 1,
+        ptsSpace = 2, ptsTime = 1,
         offsetSpace = 0, offsetTime = 1,
-        YorderBspace = 0, YorderBtime = 1,
+        YorderBspace = 1, YorderBtime = 1,
     ),
     materItpl = (
         ptsSpace = 3, ptsTime = 1,
         offsetSpace = -0.5, offsetTime = 1,
-        YorderBspace = 0, YorderBtime = 1,
+        YorderBspace = 1, YorderBtime = 1,
     ),
 ))
 

@@ -106,7 +106,7 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     # for B-spline
 
     paramsBSν  = (maximumOrder=orderBspline1D, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_nodesFromOne, idx_selectedPoints = idx_ν)
-    paramsBSμᶜ = (maximumOrder=YorderBspline1Dμᶜ, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μᶜs)
+    paramsBSμᶜ = (maximumOrder=YorderBspline1Dμᶜ, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μᶜs, idx_selectedPoints = idx_μᶜs)
     paramsBSμ  = (maximumOrder=YorderBspline1Dμ, allNodes = allNodes, idx_nodesNum = idx_nodesFromOne, idx_refPoints = idx_μs, idx_selectedPoints = idx_μs)
     # idx_nodesNum : an ordinary consecutive integer increment from 1 (the numerical nodes with Δy)
     # idx_refPoints_original : supporting nodes to construct the Bspline family
