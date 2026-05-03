@@ -141,12 +141,12 @@ push!(nameConfigs, (
     fieldItpl = (
         ptsSpace = 9, ptsTime = 1,
         offsetSpace = 0, offsetTime = 1,
-        YorderBspace = 3, YorderBtime = 1,
+        YorderBspace = 2, YorderBtime = 1,
     ),
     materItpl = (
         ptsSpace = 7, ptsTime = 1,
         offsetSpace = 1/4, offsetTime = 1,
-        YorderBspace = 3, YorderBtime = 1,
+        YorderBspace = 2, YorderBtime = 1,
     ),
 ))
 

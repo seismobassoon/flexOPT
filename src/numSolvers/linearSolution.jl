@@ -201,9 +201,8 @@ function timeMarchingSchemeLinear(
     boundaryConditionForced=false,
     assume_constant_matrix=true,
 )
-    if !isdir(datadir("fieldResults"))
-        mkdir(datadir("fieldResults"))
-    end
+    mkpath(datadir("fieldResults"))
+
 
     if isnothing(iExperiment)
         iExperiment = (iH=1, iCase=1, iPointsUsed=1)
