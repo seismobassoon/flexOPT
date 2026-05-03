@@ -13,8 +13,8 @@ function makeOPTsemiSymbolic(params::Dict)
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
 
     # here we can compute the different interpolated Taylor expansion options
-    TaylorOptionsμ=TaylorOptions(fieldItpl,supplementaryOrder)
-    TaylorOptionsμᶜ=TaylorOptions(materItpl,supplementaryOrder)
+    @show TaylorOptionsμ=TaylorOptions(fieldItpl,supplementaryOrder)
+    @show TaylorOptionsμᶜ=TaylorOptions(materItpl,supplementaryOrder)
 
     equationCharacteristics,equationCharacteristicsForce=famousEquations(famousEquationType)
     fields=equationCharacteristics.fields

@@ -132,6 +132,26 @@ push!(nameConfigs, (
 
 
 push!(nameConfigs, (
+    name = "OPT3_stag_dense",
+    orderBtime = 1,
+    orderBspace = 1,
+    pointsInSpace = 3,
+    pointsInTime = 1,
+    supplementaryOrder = 2,
+    fieldItpl = (
+        ptsSpace = 9, ptsTime = 1,
+        offsetSpace = 0, offsetTime = 1,
+        YorderBspace = 1, YorderBtime = 1,
+    ),
+    materItpl = (
+        ptsSpace = 7, ptsTime = 1,
+        offsetSpace = 1/4, offsetTime = 1,
+        YorderBspace = 1, YorderBtime = 1,
+    ),
+))
+
+
+push!(nameConfigs, (
     name = "OPT3_stag_3",
     orderBtime = 1,
     orderBspace = 1,
@@ -167,9 +187,9 @@ L = 10.0*π
 cases = push!(cases,(name=prefix*"homogeneous",u=cos(x),β=1.0))
 cases = push!(cases,(name=prefix*"sameλ",u=cos(x),β=sin(x)+2))
 cases = push!(cases,(name=prefix*"twiceλ",u=cos(x),β=sin(x/2) + 2))
-#cases = push!(cases,(name=prefix*"sameλ_shifted_π_3",u=cos(x),β=sin(x+π/3) + 2))
-#cases = push!(cases,(name=prefix*"λ_2",u=cos(x),β=cos(x).^2 + 1))
-#cases = push!(cases,(name=prefix*"quadratic",u=cos(x),β=x^2+ 1))
+cases = push!(cases,(name=prefix*"sameλ_shifted_π_3",u=cos(x),β=sin(x+π/3) + 2))
+cases = push!(cases,(name=prefix*"λ_2",u=cos(x),β=cos(x).^2 + 1))
+cases = push!(cases,(name=prefix*"quadratic",u=cos(x),β=x^2+ 1))
 
 
 misfit = Array{Float64,3}(undef,length(logsOfHinverse),length(cases),nConfigurations)
