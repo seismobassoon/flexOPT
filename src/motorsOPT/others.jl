@@ -347,6 +347,7 @@ function _investigateDependencies(::Val{N},
     end
 
     for iVars in 1:NtypeofMaterialVariables
+        @show vars, iVars
         dep = findCartesianDependency(vars[iVars], N, ∂)
         eachVariableDependency[:,iVars] = dep
         variableDependency .*= (1 .- dep)

@@ -32,7 +32,7 @@ function makeOPTsemiSymbolic(params::Dict)
 
     # compact coefficients for r.h.s. of the equation
     equationCharacteristics=equationCharacteristicsForce
-    numbersOfTheSystemR=numbersOfTheExpression(equationCharacteristics,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
+    numbersOfTheSystemR=numbersOfTheExpression(equationCharacteristicsForce,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     numbersOfTheSystem = numbersOfTheSystemR
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)

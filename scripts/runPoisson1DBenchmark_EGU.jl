@@ -52,24 +52,6 @@ push!(nameConfigs, (
 ))
 
 
-push!(nameConfigs, (
-    name = "OPT2_staggeredlLike",
-    orderBtime = 1,
-    orderBspace = 1,
-    pointsInSpace = 2,
-    pointsInTime = 1,
-    supplementaryOrder = 0,
-    fieldItpl = (
-        ptsSpace = 2, ptsTime = 1,
-        offsetSpace = 0, offsetTime = 1,
-        YorderBspace = 1, YorderBtime = 1,
-    ),
-    materItpl = (
-        ptsSpace = 3, ptsTime = 1,
-        offsetSpace = -0.5, offsetTime = 1,
-        YorderBspace = 1, YorderBtime = 1,
-    ),
-))
 
 push!(nameConfigs, (
     name = "convFD5",
@@ -77,7 +59,7 @@ push!(nameConfigs, (
     orderBspace = -1,
     pointsInSpace = 5,
     pointsInTime = 1,
-    supplementaryOrder = 0,
+    supplementaryOrder = 2,
     fieldItpl = (
         ptsSpace = 1, ptsTime = 1,
         offsetSpace = 2.0, offsetTime = 1,

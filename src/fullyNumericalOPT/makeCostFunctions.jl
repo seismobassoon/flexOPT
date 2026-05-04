@@ -67,7 +67,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     
 
     @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
-  
+    
     nConfigurations=numbersOfTheSystem.nConfigurations
     # normally the geometry configurations should be proposed in the preferred order
     nGeometry=nConfigurations

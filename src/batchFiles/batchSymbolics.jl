@@ -16,6 +16,21 @@ using Symbolics
 ∂t² = ∂t^2
 
 
+# we can also use these vectors 
+∂=[]
+∂=push!(∂,∂t)
+∂=push!(∂,∂x)
+∂=push!(∂,∂y)
+∂=push!(∂,∂z)
+
+∇₃=[∂x ; ∂y ; ∂z]
+∇₂=[∂x ; ∂y]
+
+∂²=[]
+∂²=push!(∂²,∂t²)
+∂²=push!(∂²,∂x²)
+∂²=push!(∂²,∂y²)
+∂²=push!(∂²,∂z²)
 
 #endregion
 
