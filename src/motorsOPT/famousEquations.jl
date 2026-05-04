@@ -139,6 +139,26 @@ function famousEquation(::Val{:eq_1DsismoTime})
 end
 
 
+function famousEquation(::Val{:eq_1DsismoTimeHomo})
+    # 1D SH in time problem
+        
+    @variables ρ μ u(x,t) f(x,t) 
+    expr = ρ*∂t²(u)- ∂x(μ*∂x(u)) # scalar PDE(s) to be solved
+
+    # declaration of physics
+    exprs = expr
+    vars = ρ, μ
+    fields = u # for the moment we need to put like ux uy uz to distinguish different components
+
+    extexprs=f
+    extfields=f
+    extvars=f
+
+    coordinates =(x,t)
+    ∂, ∂² = usefulPartials(coordinates)
+    return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
+end
+
 function famousEquation(::Val{:eq_1DpoissonHetero})
      # 1D Poisson hetero
     @variables κ(x) T(x) f(x)
@@ -280,6 +300,8 @@ function famousEquation(::Val{:eq_3DsismoTimeIso})
     # 3D wave equation with isotropy with double couple source
     @variables ρ(x,y,z) (C(x,y,z))[1:3,1:3,1:3,1:3] u(x,y,z,t)[1:3] (M(x,y,z))[1:3,1:3]
     @variables λ(x,y,z) μ(x,y,z)
+    #@variables ρ C[1:3,1:3,1:3,1:3] u(x,y,z,t)[1:3] f1,f2,f3 #(M(x,y,z))[1:3,1:3]
+    #@variables λ μ
     δ=Matrix(I, 3, 3) # Kronecker's delta
     @tullio C[i,j,k,l] := λ * δ[i,j]*δ[k,l]+μ*(δ[i,k]*δ[j,l]+δ[i,l]*δ[j,k])
     
@@ -293,6 +315,9 @@ function famousEquation(::Val{:eq_3DsismoTimeIso})
     extexprs = derivMoment[1], derivMoment[2], derivMoment[3]
     extfields = M[1,1], M[1,2], M[1,3], M[2,2], M[2,3],M[3,3]
     extvars = nothing
+    #extexprs = f1,f2,f3
+    #extfields = f1,f2,f3
+    #extvars = f1,f2,f3
     coordinates =(x,y,z,t)
     ∂, ∂² = usefulPartials(coordinates)
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
