@@ -61,6 +61,12 @@ function continuousAntiDerivativesMaker!(csf::CompactSymbolicFunctions)
                 csf.data[iSegment,iFunction,slots...] = expr + shiftValue
                 shiftValue += rightValue
             end
+            iSegment = numberNodes
+            expr = tmpAntiDerivative[iSegment]
+            xLeft = allNodesNumeric[iSegment]
+            leftValue = Symbolics.value(Symbolics.substitute(expr, Dict(x => xLeft)))
+            shiftValue -= leftValue
+            csf.data[iSegment,iFunction,slots...] = expr + shiftValue
         end
     end
     return
