@@ -176,6 +176,23 @@ function famousEquation(::Val{:eq_1DpoissonHetero})
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
 end
 
+function famousEquation(::Val{:eq_1DpoissonHomo})
+     # 1D Poisson hetero
+    @variables κ T(x) f(x)
+    expr = ∂x(κ*∂x(T))
+
+    exprs = mySimplify(expr)
+    vars = κ
+    fields = T
+
+    extexprs=f
+    extfields=f
+    extvars=f
+    coordinates =(x)
+    ∂, ∂² = usefulPartials(coordinates)
+    return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
+end
+
 function famousEquation(::Val{:eq_2DpoissonHomo})
     # 2D Poisson homo
 
