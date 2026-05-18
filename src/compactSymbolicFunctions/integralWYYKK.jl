@@ -59,6 +59,7 @@ function WYYKKIntegralNumerical(params;ImakeReport=true)
         lᶜ_nᶜ_slot = lᶜ_nᶜ+1
         tmpAntiDerivative=WYYKK_integral.data[:,1,l_n_slot,lᶜ_nᶜ_slot,iμ,iμᶜ,iν]
         tmpCoef = 0.0
+        # since 
         for ι in 1:numNodes-1
             xLeft = numericalNodes[ι]
             xRight = numericalNodes[ι+1]
