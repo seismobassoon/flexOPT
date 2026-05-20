@@ -74,7 +74,7 @@ function WYYKKIntegralNumerical(params;ImakeReport=true)
 end
 
 function WYYKKIntegralPureSymbolic(params::Dict)
-    # Δ should be strictly Float64
+
 
     # orders: -1 -> indicator function, 0 -> box car, >=1 -> B-spline
 
@@ -144,11 +144,22 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     orderSlot = maximum((orderBspline1D + 1,1)) # for order = -1 : just boxcar
     derivSlot = 1 # no derivatives
 
-    for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
-        l_n_slot=l_n+1
-        lᶜ_nᶜ_slot = lᶜ_nᶜ+1
-        WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Wν.b.data[:,iν,derivSlot,orderSlot].*Yμᶜ.b.data[:,iμᶜ,derivSlot,YorderSlotμᶜ].*Yμ.b.data[:,iμ,derivSlot,YorderSlotμ].*Kμᶜ.k.data[:,iμᶜ,lᶜ_nᶜ_slot].*Kμ.k.data[:,iμ,l_n_slot])
+    if Wν !== nothing
+        for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
+            l_n_slot=l_n+1
+            lᶜ_nᶜ_slot = lᶜ_nᶜ+1
+            WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Wν.b.data[:,iν,derivSlot,orderSlot].*Yμᶜ.b.data[:,iμᶜ,derivSlot,YorderSlotμᶜ].*Yμ.b.data[:,iμ,derivSlot,YorderSlotμ].*Kμᶜ.k.data[:,iμᶜ,lᶜ_nᶜ_slot].*Kμ.k.data[:,iμ,l_n_slot])
+        end
+    else
+        for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
+            l_n_slot=l_n+1
+            lᶜ_nᶜ_slot = lᶜ_nᶜ+1
+            WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Yμᶜ.b.data[:,iν,derivSlot,YorderSlotμᶜ].*Yμ.b.data[:,iν,derivSlot,YorderSlotμ].*Kμᶜ.k.data[:,iν,lᶜ_nᶜ_slot].*Kμ.k.data[:,iν,l_n_slot])
+        end
     end
+
+
+
 
     WYYKK_integral = integrate(WYYKK,x)
     continuousAntiDerivativesMaker!(WYYKK_integral)

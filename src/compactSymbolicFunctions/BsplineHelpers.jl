@@ -19,7 +19,7 @@ The construction:
   `idx_refPoints`.
 
 The returned `b` array stores piecewise symbolic expressions with layout
-`(segment, function, order_slot)`, where `order_slot = p + 2` corresponds to
+`(segment, function, order_slot)`, where `order_slot = p + 1` corresponds to
 degree `p`.
 """
 function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:ghost,correction_truncation=true,)
@@ -43,37 +43,42 @@ function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:g
     segmentNodes = allNodes[rangeSegments]
     numberFunctionsOriginal = length(idx_refPoints_original)
 
-    # Special case: only p = -1 indicator family.
+
+
+    # # Special case: only p = -1 indicator family.
+    # if maximumOrder == -1
+    #     b_full = CompactSymbolicFunctions(
+    #         allNodes,
+    #         numberFunctionsOriginal;
+    #         auxDims=(1,),
+    #         variables=variables,
+    #     )
+    #     b_support = CompactSymbolicFunctions(
+    #         segmentNodes,
+    #         numberFunctionsOriginal;
+    #         auxDims=(1,),
+    #         variables=variables,
+    #     )
+
+    #     b_full.data[rangeSegments, :, 1] .= 1
+    #     b_support.data[:, :, 1] .= 1
+
+    #     b = CompactSymbolicFunctions(
+    #         segmentNodes,
+    #         length(selected_positions);
+    #         auxDims=(1,),
+    #         variables=variables,
+    #         init=b_support.data[:, selected_positions, :],
+    #     )
+
+    #     return (
+    #         b = b,
+    #         b_full = b_full,
+    #         b_support = b_support,
+    #     )
+    # end
     if maximumOrder == -1
-        b_full = CompactSymbolicFunctions(
-            allNodes,
-            numberFunctionsOriginal;
-            auxDims=(1,),
-            variables=variables,
-        )
-        b_support = CompactSymbolicFunctions(
-            segmentNodes,
-            numberFunctionsOriginal;
-            auxDims=(1,),
-            variables=variables,
-        )
-
-        b_full.data[rangeSegments, :, 1] .= 1
-        b_support.data[:, :, 1] .= 1
-
-        b = CompactSymbolicFunctions(
-            segmentNodes,
-            length(selected_positions);
-            auxDims=(1,),
-            variables=variables,
-            init=b_support.data[:, selected_positions, :],
-        )
-
-        return (
-            b = b,
-            b_full = b_full,
-            b_support = b_support,
-        )
+        return nothing
     end
 
     NorderShiftedByOne = maximumOrder + 1
