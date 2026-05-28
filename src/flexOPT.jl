@@ -1,6 +1,7 @@
 module flexOPT
 
     using Symbolics,UnPack,Tullio
+    using Dates
     using KernelAbstractions
     using ..commonBatchs
     using Adapt
@@ -32,7 +33,8 @@ module flexOPT
     # semi-symbolics operators to fully numerical operators
     #include("fullyNumericalOPT/makeCostFunctions.jl")
     include("fullyNumericalOPT/makeCostFunctions.jl")
-    export numericalOperatorConstruction
+    include("fullyNumericalOPT/others.jl")
+    export numericalOperatorConstruction,getModelPoints
 
     include("../src/numSolvers/linearSolution.jl")
     include("../src/numSolvers/timeMarchingSchemes.jl")
@@ -40,7 +42,7 @@ module flexOPT
     export prepareNumericalOperators,timeMarchingSchemePrepared,prepareLinearSystem,evaluateLinearSystem!,evaluateLinearSystem,timeMarchingSchemeLinear
 
 
-    export getModelPoints,quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
+    export quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
 
     export famousEquations, Ricker
 

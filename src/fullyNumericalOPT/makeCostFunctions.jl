@@ -1,5 +1,8 @@
 function numericalOperatorConstruction(params::Dict)
     @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
+    if modelFam.modelName === nothing
+        modelFam.modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")
+    end
     costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
     costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
     costfunctions=costLHS.costFunctions-costRHS.costFunctions
