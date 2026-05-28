@@ -1,12 +1,12 @@
 
-function getModelPoints(models,pointsInTime,timeMarching)
+function getModelPoints(model,pointsInTime,timeMarching)
     
     fakeNt = 1
     if timeMarching
         fakeNt = pointsInTime+1
-        modelPoints = (size(models)...,fakeNt) # Nx, Ny etc thing. Nt is also mentioned and it should be the last element!
+        modelPoints = (size(model)...,fakeNt) # Nx, Ny etc thing. Nt is also mentioned and it should be the last element!
     else
-        modelPoints = (size(models)...,1)
+        modelPoints = (size(model)...,1)
     end
     return modelPoints 
 end
