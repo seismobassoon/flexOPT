@@ -54,13 +54,14 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     @unpack fields, extfields = fieldNames
 
-    fields = nothing
+    
     if side=="left"
         symA=lhs.Ajiννᶜ
         varM=lhs.varM
         Ulocal=lhs.Ulocal
         fields=fields
     elseif side=="right"
+        fields = nothing
         symA=rhs.Γjiννᶜ
         varM=rhs.varF
         Ulocal=rhs.Flocal
