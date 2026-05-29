@@ -48,6 +48,9 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     #endregion
 
     #region
+
+    prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+
     @unpack models, modelName, modelPoints = modelFam
 
 
@@ -55,6 +58,8 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     @unpack fields, extfields = fieldNames
 
+
+    
     
     if side=="left"
         symA=lhs.Ajiννᶜ
@@ -268,7 +273,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     #endregion
 
-
+    
     # Fields
  
     場 = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
@@ -410,6 +415,25 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     return (costFunctions=costFunctions,場=場,champsLimité=champsLimité)
 
 end
+
+function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+    return (modelPoints=modelPoints,
+    wholeRegionPoints=wholeRegionPoints,
+    absorbingBoundaries=absorbingBoundaries,
+    νWhole=νWhole,
+    νGeometry=νGeometry,
+    νRelative=νRelative,
+    localPointsIndices=localPointsIndices,
+    middlepoints=middlepoints,
+    ModelPoints=ModelPoints,
+    maskingField=maskingField,
+    conv=conv,
+    )
+end
+
+
+
+
 
 carDropDim(v::SVector{N,T}) where {N,T} = SVector{N-1,T}(ntuple(i -> v[i], N-1))
 
