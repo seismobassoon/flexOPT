@@ -74,6 +74,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
     
     nConfigurations=numbersOfTheSystem.nConfigurations
+
     # normally the geometry configurations should be proposed in the preferred order
     nGeometry=nConfigurations
     Ndimension=nCoordinates
@@ -192,19 +193,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     # For now, all points use geometry 1, so this is the active time depth.
     activeTimePoints = timePointsUsedForOneStep[1]
 
-    # Fields
- 
-    場 = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
-
-    for it ∈ 1:activeTimePoints
-        for iField ∈ 1:NtypeofFields
-            newstring = side*"_"*string(iField) * "_t_" * string(it)
-            場[iField, it] = Symbolics.variables(
-                Symbol(newstring),
-                Base.OneTo.(Tuple(wholeRegionPointsSpace))...
-            )
-        end
-    end
+   
 
 
     #since everything is super clumsy, here we make several useful functions to change one coordinate to another
@@ -278,6 +267,23 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     end
 
     #endregion
+
+
+    # Fields
+ 
+    場 = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
+
+    for it ∈ 1:activeTimePoints
+        for iField ∈ 1:NtypeofFields
+            newstring = side*"_"*string(iField) * "_t_" * string(it)
+            場[iField, it] = Symbolics.variables(
+                Symbol(newstring),
+                Base.OneTo.(Tuple(wholeRegionPointsSpace))...
+            )
+        end
+    end
+
+
 
     #region
     # one operator per test point in space, for now
