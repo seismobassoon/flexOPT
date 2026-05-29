@@ -1,7 +1,7 @@
 function numericalOperatorConstruction(params::Dict)
     @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
-    if modelFam.modelName === nothing
-        modelFam.modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")
+    if !hasproperty(modelFam, :modelName) || modelFam.modelName === nothing
+        modelFam = merge(modelFam, (; modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")))
     end
     costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
     costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
@@ -283,7 +283,10 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     NtestfunctionsInSpace = length(νWhole)
     costFunctions = Array{Any,2}(undef, NtypeofExpr, NtestfunctionsInSpace)
     costFunctions .= 0
-    for iTestFunctions in eachindex(νWhole)
+    Threads.@threads for iTestFunctions in eachindex(νWhole)
+
+        localCost = zeros(Any,NtypeofExpr)
+
         iPoint = iTestFunctions
         νtmpWhole = νWhole[iPoint]
 
@@ -355,14 +358,14 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
                             #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
                             #    場[iField, iT][jPoint] * maskingField[jPoint]
-                            costFunctions[iExpr, iTestFunctions] += 
+                            localCost[iExpr] += 
                                 場[iField, iT][jPoint] * maskingField[jPoint] *
                                 substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
                         else
                             if iT == iTimeMax
                                 #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
                                 #    場[iField, iT][jPoint] * maskingField[jPoint]
-                                costFunctions[iExpr, iTestFunctions] += 
+                                localCost[iExpr] += 
                                     場[iField, iT][jPoint] * maskingField[jPoint] *
                                     substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
                             else
@@ -375,10 +378,10 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
                                 #    場[iField, iT][jPoint] *
                                 #    maskingField[jPoint] *
                                 #    CerjanBoundaryCondition(distance2)
-                                costFunctions[iExpr, iTestFunctions] += 
+                                localCost[iExpr] += 
                                     場[iField, iT][jPoint] * maskingField[jPoint] *
                                     CerjanBoundaryCondition(distance2) *
-                                    substitute(symA[linearjPointTLocal,iField,iExpr,Geometry],tmpMapping)
+                                    substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
                             end
                         end
                     end
@@ -390,6 +393,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
             #costFunctions[iExpr, iTestFunctions] +=
             #    substitute(Av[iExpr,iGeometry], tmpMapping)
         end
+        costFunctions[:, iTestFunctions] .= localCost
     end
 
 
