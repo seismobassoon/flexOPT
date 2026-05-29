@@ -285,8 +285,8 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     costFunctions .= 0
     Threads.@threads for iTestFunctions in eachindex(νWhole)
 
-        localCost = zeros(Any,NtypeofExpr)
-
+        localCost = Array{Any,1}(undef,NtypeofExpr)
+        localCost .= 0.0
         iPoint = iTestFunctions
         νtmpWhole = νWhole[iPoint]
 
