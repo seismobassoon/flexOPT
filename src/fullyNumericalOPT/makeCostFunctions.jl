@@ -47,6 +47,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     #
     #endregion
 
+    #region
     @unpack models, modelName, modelPoints = modelFam
 
 
@@ -145,8 +146,6 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     
     #endregion
     
-
-
     
     #region construction of the fields
 
@@ -212,6 +211,8 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     
     conv=spaceCoordinatesConversionfunctions(absorbingBoundaries[:,1:end-1], newD-1)
     #endregion 
+
+    #region
 
     # Useful point lists
     PointsSpace = CartesianIndices(Tuple(wholeRegionPointsSpace))
@@ -399,8 +400,6 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
 
     #endregion
-
-
 
     return (costFunctions=costFunctions,場=場,champsLimité=champsLimité)
 
