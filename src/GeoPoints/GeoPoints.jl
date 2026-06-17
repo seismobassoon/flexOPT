@@ -305,6 +305,48 @@ end
 
 
 
+
+function constructLocalBox(p0::GeoPoint,Δx::Float64,Δz::Float64,横行きMin::Float64,横行きMax::Float64,altMin::Float64,altMax::Float64;axis_angle_deg=90.0)
+    # axis_angle_deg: 0=north, 90: east
+
+    # 2D
+    Δy = 1.0 # in metre as a dummy
+    奥行きMin=0.0 # y axis range
+    奥行きMax=1.0
+    output =constructLocalBox(p0,Δx,Δy,Δz,横行きMin,横行きMax,奥行きMin,奥行きMax,altMin,altMax;axis_angle_deg=axis_angle_deg)
+    allGridsInGeoPoints = output.allGridsInGeoPoints[:,1,:]
+    allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
+    effectiveRadii = output.effectiveRadii[:,1,:]
+    return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
+            Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz,pOriginECEF=output.pOriginECEF,rotationMatrix=output.rotationMatrix)
+end
+
+function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,横行きMin::Float64,横行きMax::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;axis_angle_deg=90.0)
+
+    # axis_angle_deg: 0=north, 90: east
+    
+    
+    # 3D
+
+    # define p1 and p2 from 横行き making just +/- on the east-west direction
+
+    u_east  = sind(angle_deg)
+    u_north = cosd(angle_deg)
+
+    axisVector = GeoPoint(p0.lat+u_north,p0.lon+u_east)-p0
+    
+    p1 = p0 + 横行きMin*axisVector
+    p1 = GeoPoint(p1.lat,p1.lon)
+
+    p2 = p0 + 横行きMax*axisVector
+    p2 = GeoPoint(p2.lat,p2.lon)
+
+    return constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;centreOption="p0",p0=p0)
+    
+end
+
+
+
 function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δz::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64 = 0.0, rightLimit::Float64=(p2-p1).radius,centreOption="middle")
 
     # 2D
@@ -321,7 +363,7 @@ end
 
 
 
-function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64=0.0,rightLimit::Float64=(p2-p1).radius,centreOption="middle")
+function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64=0.0,rightLimit::Float64=(p2-p1).radius,centreOption="middle",p0=nothing)
 
 
     # 3D
@@ -329,7 +371,9 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
     R=makeLocalCoordinateUnitVectors(p1,p2) 
     pOrigin = nothing
     xOrigin = 0.0
-    if centreOption === "p1"
+    if centreOption === "p0"
+        pOrigin = p0.ecef
+    elseif centreOption === "p1"
         pOrigin = p1.ecef # p1 centred coordinates
     elseif centreOption === "middle"
         pMiddle = (p1+p2)/2.0

@@ -49,7 +49,168 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     #region
 
-    prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+    numericalGeometry = prepareNumericalOperatorGeometry(optRec,modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+
+    @unpack νWhole, νGeometry, νRelative, localPointsIndices, middlepoints,
+        ModelPoints, Models, maskingField, conv,
+        timePointsUsedForOneStep, wholeMin, wholeMax, modelMin,
+        wholeRegionPoints, wholeRegionPointsSpace = numericalGeometry
+
+    @unpack models, modelName, modelPoints = modelFam
+
+    @unpack lhs, rhs, nodes, centresIndices, numbersOfTheSystem,fieldNames=optRec["recette"]
+
+    @unpack fields, extfields = fieldNames
+    
+    @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
+    
+    nConfigurations=numbersOfTheSystem.nConfigurations
+
+    if side == "left"
+        symA = lhs.Ajiννᶜ
+        varM = lhs.varM
+        Ulocal = lhs.Ulocal
+        fieldSyms = fields
+    elseif side == "right"
+        symA = rhs.Γjiννᶜ
+        varM = rhs.varF
+        Ulocal = rhs.Flocal
+        fieldSyms = extfields
+    else
+        throw(ArgumentError("side must be \"left\" or \"right\", got $side"))
+    end
+
+
+
+
+    #region
+    # one operator per test point in space, for now
+    NtestfunctionsInSpace = length(νWhole)
+    costFunctions = Array{Any,2}(undef, NtypeofExpr, NtestfunctionsInSpace)
+    costFunctions .= 0
+    Threads.@threads for iTestFunctions in eachindex(νWhole)
+
+        localCost = Array{Any,1}(undef,NtypeofExpr)
+        localCost .= 0.0
+        iPoint = iTestFunctions
+        νtmpWhole = νWhole[iPoint]
+
+        # preferred geometry for this test point
+        iGeometry = νGeometry[iPoint]
+        localPointsHere = localPointsIndices[iGeometry]
+        middlepointHere = νRelative[iPoint]              # for now = middlepoints[iGeometry][1]
+        localPointsSpaceHere = carDropDim.(localPointsHere)
+        localPointsSpaceIndicesHere = CartesianIndices(Tuple(localPointsSpaceHere[end]))
+        middlepointSpaceHere = svec2car(carDropDim(middlepointHere))
+        
+        # if time is appended, the active time depth depends on the geometry
+        iTimeMax = timePointsUsedForOneStep[iGeometry]
+
+        # shift local stencil to the current whole-space test point
+     
+        νᶜtmpWhole = localPointsSpaceIndicesHere .+ (νtmpWhole .- svec2car(carDropDim(middlepointHere)))
+        νᶜtmpModel = conv.whole2model.(νᶜtmpWhole)
+
+        # linear indexing on the chosen local stencil
+        localLinearIndices = LinearIndices(Tuple(localPointsHere[end]))
+
+
+        for iExpr in 1:NtypeofExpr
+            tmpMapping = Dict()
+
+            for iT in 1:iTimeMax
+                # material variables
+                for iVar in 1:NtypeofMaterialVariables
+                    spaceModelBouncedPoints = ModelPoints[1:end-1, iVar]
+                    iiT = ModelPoints[end, iVar] > 1 ? iT : 1
+
+                    
+                    νᶜtmpModelTruncated = BouncingCoordinates.(νᶜtmpModel, Ref(spaceModelBouncedPoints))
+
+                    for jPoint in νᶜtmpWhole
+                        jPointLocal = jPoint - νtmpWhole + svec2car(carDropDim(middlepointHere))
+                        jPointTLocal = carAddDim(jPointLocal, iT)
+                        linearjPointTLocal = localLinearIndices[jPointTLocal]
+
+                        tmpMapping[varM[iVar, linearjPointTLocal]] =
+                            Models[iVar][carAddDim(νᶜtmpModelTruncated[jPointLocal], iiT)]
+                    end
+
+
+                end
+
+                # fields
+                for jPoint in νᶜtmpWhole
+                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
+                    jPointTLocal = carAddDim(jPointLocal, iT)
+                    linearjPointTLocal = localLinearIndices[jPointTLocal]
+
+                    jPointInWhole = is_all_less_than_or_equal(wholeMin, jPoint) &&
+                                    is_all_less_than_or_equal(jPoint, wholeMax)
+
+                    if !jPointInWhole
+                        for iField in 1:NtypeofFields
+                            tmpMapping[Ulocal[linearjPointTLocal, iField]] = 0.0
+                        end
+                        continue
+                    end
+
+                    jPointModel = conv.whole2model(jPoint)
+
+                    for iField in 1:NtypeofFields
+                        if is_all_less_than_or_equal(modelMin, jPointModel) &&
+                        is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+
+                            #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
+                            #    場[iField, iT][jPoint] * maskingField[jPoint]
+                            localCost[iExpr] += 
+                                場[iField, iT][jPoint] * maskingField[jPoint] *
+                                substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
+                        else
+                            if iT == iTimeMax
+                                #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
+                                #    場[iField, iT][jPoint] * maskingField[jPoint]
+                                localCost[iExpr] += 
+                                    場[iField, iT][jPoint] * maskingField[jPoint] *
+                                    substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
+                            else
+                                distance2 = distance2_point_to_box(
+                                    jPointModel,
+                                    modelMin,
+                                    vec2car(ModelPoints[1:end-1, 1]),
+                                )
+                                #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
+                                #    場[iField, iT][jPoint] *
+                                #    maskingField[jPoint] *
+                                #    CerjanBoundaryCondition(distance2)
+                                localCost[iExpr] += 
+                                    場[iField, iT][jPoint] * maskingField[jPoint] *
+                                    CerjanBoundaryCondition(distance2) *
+                                    substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
+                            end
+                        end
+                    end
+                end
+
+            end
+
+            # centre-only address: always use the geometry centre now
+            #costFunctions[iExpr, iTestFunctions] +=
+            #    substitute(Av[iExpr,iGeometry], tmpMapping)
+        end
+        costFunctions[:, iTestFunctions] .= localCost
+    end
+
+
+
+    #endregion
+
+    return (costFunctions=costFunctions,場=場,champsLimité=champsLimité)
+
+end
+
+function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+
 
     @unpack models, modelName, modelPoints = modelFam
 
@@ -58,8 +219,6 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     @unpack fields, extfields = fieldNames
 
-
-    
     
     if side=="left"
         symA=lhs.Ajiννᶜ
@@ -273,150 +432,16 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     #endregion
 
-    
-    # Fields
- 
-    場 = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
+    fieldLinearIndices = LinearIndices(
+        (NtypeofFields, activeTimePoints, Tuple(wholeRegionPointsSpace)...)
+    )
 
-    for it ∈ 1:activeTimePoints
-        for iField ∈ 1:NtypeofFields
-            newstring = side*"_"*string(iField) * "_t_" * string(it)
-            場[iField, it] = Symbolics.variables(
-                Symbol(newstring),
-                Base.OneTo.(Tuple(wholeRegionPointsSpace))...
-            )
-        end
-    end
+    residualLinearIndices = LinearIndices(
+        (NtypeofExpr, length(νWhole))
+    )
 
 
 
-    #region
-    # one operator per test point in space, for now
-    NtestfunctionsInSpace = length(νWhole)
-    costFunctions = Array{Any,2}(undef, NtypeofExpr, NtestfunctionsInSpace)
-    costFunctions .= 0
-    Threads.@threads for iTestFunctions in eachindex(νWhole)
-
-        localCost = Array{Any,1}(undef,NtypeofExpr)
-        localCost .= 0.0
-        iPoint = iTestFunctions
-        νtmpWhole = νWhole[iPoint]
-
-        # preferred geometry for this test point
-        iGeometry = νGeometry[iPoint]
-        localPointsHere = localPointsIndices[iGeometry]
-        middlepointHere = νRelative[iPoint]              # for now = middlepoints[iGeometry][1]
-        localPointsSpaceHere = carDropDim.(localPointsHere)
-        localPointsSpaceIndicesHere = CartesianIndices(Tuple(localPointsSpaceHere[end]))
-        middlepointSpaceHere = svec2car(carDropDim(middlepointHere))
-        
-        # if time is appended, the active time depth depends on the geometry
-        iTimeMax = timePointsUsedForOneStep[iGeometry]
-
-        # shift local stencil to the current whole-space test point
-     
-        νᶜtmpWhole = localPointsSpaceIndicesHere .+ (νtmpWhole .- svec2car(carDropDim(middlepointHere)))
-        νᶜtmpModel = conv.whole2model.(νᶜtmpWhole)
-
-        # linear indexing on the chosen local stencil
-        localLinearIndices = LinearIndices(Tuple(localPointsHere[end]))
-
-
-        for iExpr in 1:NtypeofExpr
-            tmpMapping = Dict()
-
-            for iT in 1:iTimeMax
-                # material variables
-                for iVar in 1:NtypeofMaterialVariables
-                    spaceModelBouncedPoints = ModelPoints[1:end-1, iVar]
-                    iiT = ModelPoints[end, iVar] > 1 ? iT : 1
-
-                    
-                    νᶜtmpModelTruncated = BouncingCoordinates.(νᶜtmpModel, Ref(spaceModelBouncedPoints))
-
-                    for jPoint in νᶜtmpWhole
-                        jPointLocal = jPoint - νtmpWhole + svec2car(carDropDim(middlepointHere))
-                        jPointTLocal = carAddDim(jPointLocal, iT)
-                        linearjPointTLocal = localLinearIndices[jPointTLocal]
-
-                        tmpMapping[varM[iVar, linearjPointTLocal]] =
-                            Models[iVar][carAddDim(νᶜtmpModelTruncated[jPointLocal], iiT)]
-                    end
-
-
-                end
-
-                # fields
-                for jPoint in νᶜtmpWhole
-                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
-                    jPointTLocal = carAddDim(jPointLocal, iT)
-                    linearjPointTLocal = localLinearIndices[jPointTLocal]
-
-                    jPointInWhole = is_all_less_than_or_equal(wholeMin, jPoint) &&
-                                    is_all_less_than_or_equal(jPoint, wholeMax)
-
-                    if !jPointInWhole
-                        for iField in 1:NtypeofFields
-                            tmpMapping[Ulocal[linearjPointTLocal, iField]] = 0.0
-                        end
-                        continue
-                    end
-
-                    jPointModel = conv.whole2model(jPoint)
-
-                    for iField in 1:NtypeofFields
-                        if is_all_less_than_or_equal(modelMin, jPointModel) &&
-                        is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
-
-                            #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
-                            #    場[iField, iT][jPoint] * maskingField[jPoint]
-                            localCost[iExpr] += 
-                                場[iField, iT][jPoint] * maskingField[jPoint] *
-                                substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
-                        else
-                            if iT == iTimeMax
-                                #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
-                                #    場[iField, iT][jPoint] * maskingField[jPoint]
-                                localCost[iExpr] += 
-                                    場[iField, iT][jPoint] * maskingField[jPoint] *
-                                    substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
-                            else
-                                distance2 = distance2_point_to_box(
-                                    jPointModel,
-                                    modelMin,
-                                    vec2car(ModelPoints[1:end-1, 1]),
-                                )
-                                #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
-                                #    場[iField, iT][jPoint] *
-                                #    maskingField[jPoint] *
-                                #    CerjanBoundaryCondition(distance2)
-                                localCost[iExpr] += 
-                                    場[iField, iT][jPoint] * maskingField[jPoint] *
-                                    CerjanBoundaryCondition(distance2) *
-                                    substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
-                            end
-                        end
-                    end
-                end
-
-            end
-
-            # centre-only address: always use the geometry centre now
-            #costFunctions[iExpr, iTestFunctions] +=
-            #    substitute(Av[iExpr,iGeometry], tmpMapping)
-        end
-        costFunctions[:, iTestFunctions] .= localCost
-    end
-
-
-
-    #endregion
-
-    return (costFunctions=costFunctions,場=場,champsLimité=champsLimité)
-
-end
-
-function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBoundaries, maskedRegionInSpace)
     return (modelPoints=modelPoints,
     wholeRegionPoints=wholeRegionPoints,
     absorbingBoundaries=absorbingBoundaries,
@@ -426,8 +451,16 @@ function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBounda
     localPointsIndices=localPointsIndices,
     middlepoints=middlepoints,
     ModelPoints=ModelPoints,
+    geometryPreference=geometryPreference,
     maskingField=maskingField,
     conv=conv,
+    Models = Models,
+    timePointsUsedForOneStep = timePointsUsedForOneStep,
+    activeTimePoints = activeTimePoints,
+    wholeRegionPointsSpace = wholeRegionPointsSpace,
+    wholeMin = wholeMin,
+    wholeMax = wholeMax,
+    modelMin = modelMin,
     )
 end
 
