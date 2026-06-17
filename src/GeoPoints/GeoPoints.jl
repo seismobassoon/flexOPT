@@ -330,8 +330,8 @@ function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,�
 
     # define p1 and p2 from 横行き making just +/- on the east-west direction
 
-    u_east  = sind(angle_deg)
-    u_north = cosd(angle_deg)
+    u_east  = sind(axis_angle_deg)
+    u_north = cosd(axis_angle_deg)
 
     axisVector = GeoPoint(p0.lat+u_north,p0.lon+u_east)-p0
     
