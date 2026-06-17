@@ -185,6 +185,14 @@ function *(a::GeoPoint,c::Real; ell=DEFAULT_ELLIPSOID[])
     GeoPoint(lla.lat,lla.lon,lla.alt,ecef,radius)
 end
 
+function *(c::Real,a::GeoPoint; ell=DEFAULT_ELLIPSOID[])
+    ecef=a.ecef * c
+    lla = LLA(ECEF(ecef...),ell)
+    radius = norm(ecef)
+    GeoPoint(lla.lat,lla.lon,lla.alt,ecef,radius)
+end
+
+
 
 function effectiveRadius(a::GeoPoint,r0::Float64; ell=DEFAULT_ELLIPSOID[])
     radiusPlanetHere = GeoPoint(a.lat,a.lon).radius 
