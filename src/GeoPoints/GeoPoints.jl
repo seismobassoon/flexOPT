@@ -1,3 +1,4 @@
+
 DEFAULT_PLANET = Ref(:Earth) #set_default_planet! can change this
 
 
@@ -39,6 +40,7 @@ function set_default_planet!(name::Symbol)
     DEFAULT_PLANET[]=name
     DEFAULT_ELLIPSOID[] = planet_ellipsoid(name)
 end
+
 
 
 struct GeoPoint
@@ -426,3 +428,55 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
     
 end
 
+struct GeoPointSet
+    name::String
+    points::Vector{GeoPoint}
+    color
+    marker
+end
+
+function GeoPointSet(name::String, points::Vector{GeoPoint}; color=:black, marker=:circle)
+    return GeoPointSet(name, points, color, marker)
+end
+
+function enuBasis(p0::GeoPoint)
+    lat = deg2rad(p0.lat)
+    lon = deg2rad(p0.lon)
+
+    east = SVector(-sin(lon), cos(lon), 0.0)
+
+    north = SVector(
+        -sin(lat) * cos(lon),
+        -sin(lat) * sin(lon),
+         cos(lat),
+    )
+
+    up = SVector(
+        cos(lat) * cos(lon),
+        cos(lat) * sin(lon),
+        sin(lat),
+    )
+
+    return east, north, up
+end
+
+function localENU(p::GeoPoint, p0::GeoPoint)
+    east, north, up = enuBasis(p0)
+    d = p.ecef - p0.ecef
+
+    xEast  = dot(d, east)
+    yNorth = dot(d, north)
+    zUp    = dot(d, up)
+
+    return xEast, yNorth, zUp
+end
+
+function GeoPoints_to_local(points::AbstractVector{GeoPoint}, boxGrids3D)
+    pOrigin = boxGrids3D.pOriginECEF 
+    R = boxGrids3D.rotationMatrix
+
+    return [
+        p_ECEF_to_local(p.ecef, pOrigin, R)
+        for p in points
+    ]
+end

@@ -30,6 +30,7 @@ module GeoPoints
     export DEFAULT_PLANET,DEFAULT_ELLIPSOID, planet_ellipsoid, set_default_planet!, localCoord2D, localCoord3D
     export p_ECEF_to_local, p_local_to_ECEF, p_ECEF_to_local2D
     export GeoPoint, +, -, /, *
+    export GeoPointSet,GeoPoints_to_local
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
     export getParamsAndTopo,getParamsWithoutTopo #, interpolate_params, GMTprecision
