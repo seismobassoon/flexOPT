@@ -10,6 +10,8 @@ module GeoPoints
     using Interpolations
     using FileIO,CairoMakie
     using Colors, Images
+    using Base.Threads
+
     import Base: +,-,/,*
 
 

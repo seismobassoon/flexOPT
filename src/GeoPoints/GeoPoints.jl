@@ -340,16 +340,18 @@ function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,�
 
     # define p1 and p2 from 横行き making just +/- on the east-west direction
 
-    u_east  = sind(axis_angle_deg)
-    u_north = cosd(axis_angle_deg)
+    eps = 0.01
+    u_east  = sind(axis_angle_deg)*eps
+    u_north = cosd(axis_angle_deg)*eps
 
     axisVector = GeoPoint(p0.lat+u_north,p0.lon+u_east)-p0
+    axisVector = axisVector/axisVector.radius
     
     p1 = p0 + 横行きMin*axisVector
-    p1 = GeoPoint(p1.lat,p1.lon)
+    @show p1 = GeoPoint(p1.lat,p1.lon)
 
     p2 = p0 + 横行きMax*axisVector
-    p2 = GeoPoint(p2.lat,p2.lon)
+    @show p2 = GeoPoint(p2.lat,p2.lon)
 
     return constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;centreOption="p0",p0=p0)
     
@@ -381,18 +383,18 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
     R=makeLocalCoordinateUnitVectors(p1,p2) 
     pOrigin = nothing
     xOrigin = 0.0
-    if centreOption === "p0"
+    if centreOption == "p0"
         pOrigin = p0.ecef
-    elseif centreOption === "p1"
+    elseif centreOption == "p1"
         pOrigin = p1.ecef # p1 centred coordinates
-    elseif centreOption === "middle"
+    elseif centreOption == "middle"
         pMiddle = (p1+p2)/2.0
         pOrigin = GeoPoint(pMiddle.lat,pMiddle.lon).ecef # the middle point centred coordinates at the surface (altitude=0.0)
         xOrigin = -(p2-p1).radius/2.0
-    elseif centreOption === "nothing"
+    elseif centreOption == "nothing"
         pOrigin = p1.ecef
         xOrigin = 0.0
-    elseif centreOption === "centreOfPlanet"
+    elseif centreOption == "centreOfPlanet"
         pOrigin = SVector(0.0,0.0,0.0)
         xOrigin = -(p2-p1).radius/2.0
     end
@@ -403,24 +405,38 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
     Ny = Int64((奥行きMax-奥行きMin) ÷ Δy +1)
     Nz = Int64((altMax-altMin) ÷ Δz + 1 ) 
 
-    allGridsInGeoPoints=Array{GeoPoint,3}(undef,Nx,Ny,Nz)
 
-    allGridsInCartesian=Array{localCoord3D,3}(undef,Nx,Ny,Nz)
+    allGridsInGeoPoints = Array{GeoPoint,3}(undef, Nx, Ny, Nz)
+    allGridsInCartesian = Array{localCoord3D,3}(undef, Nx, Ny, Nz)
+    effectiveRadii = Array{Float64,3}(undef, Nx, Ny, Nz)
 
-    effectiveRadii=Array{Float64,3}(undef,Nx,Ny,Nz)
+    averagePlanetRadius =
+        planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer * 1.e3
 
+    Threads.@threads for iz in 1:Nz
+        for iy in 1:Ny
+            for ix in 1:Nx
+                iXYZ = CartesianIndex(ix, iy, iz)
 
-    for iXYZ in CartesianIndices(allGridsInGeoPoints)
-        
-        ix, iy, iz = Tuple(iXYZ)
-        
-        tmpLocalPoint=localCoord3D(ix,iy,iz,Δx,Δy,Δz,pOrigin,R;startX=xOrigin+leftLimit-Δx,startY=奥行きMin-Δy,startZ=altMin-Δz,pCentre=pCentre)
-        tmpGeoPoint=GeoPoint(p_local_to_ECEF(tmpLocalPoint.xyz,pOrigin,R))
-        
-        allGridsInGeoPoints[iXYZ] = tmpGeoPoint
-        allGridsInCartesian[iXYZ] = tmpLocalPoint
+                tmpLocalPoint = localCoord3D(
+                    ix, iy, iz,
+                    Δx, Δy, Δz,
+                    pOrigin, R;
+                    startX = xOrigin + leftLimit - Δx,
+                    startY = 奥行きMin - Δy,
+                    startZ = altMin - Δz,
+                    pCentre = pCentre,
+                )
 
-        effectiveRadii[iXYZ]=effectiveRadius(tmpGeoPoint,planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 )
+                tmpGeoPoint = GeoPoint(
+                    p_local_to_ECEF(tmpLocalPoint.xyz, pOrigin, R)
+                )
+
+                allGridsInGeoPoints[iXYZ] = tmpGeoPoint
+                allGridsInCartesian[iXYZ] = tmpLocalPoint
+                effectiveRadii[iXYZ] = effectiveRadius(tmpGeoPoint, averagePlanetRadius)
+            end
+        end
     end
 
     return (allGridsInGeoPoints=allGridsInGeoPoints, allGridsInCartesian=allGridsInCartesian, effectiveRadii=effectiveRadii, 
