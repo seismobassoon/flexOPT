@@ -346,14 +346,20 @@ function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,�
 
     axisVector = GeoPoint(p0.lat+u_north,p0.lon+u_east)-p0
     axisVector = axisVector/axisVector.radius
+
+    p1ᶜ = p0 - axisVector
+    p2ᶜ = p0 + axisVector
+
+    axisVector = p2ᶜ - p1ᶜ
+    axisVector = axisVector/axisVector.radius
     
     p1 = p0 + 横行きMin*axisVector
-    @show p1 = GeoPoint(p1.lat,p1.lon)
+    p1 = GeoPoint(p1.lat,p1.lon)
 
     p2 = p0 + 横行きMax*axisVector
-    @show p2 = GeoPoint(p2.lat,p2.lon)
+    p2 = GeoPoint(p2.lat,p2.lon)
 
-    return constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;centreOption="p0",p0=p0)
+    return constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=横行きMin,rightLimit=横行きMax,centreOption="p0",p0=p0)
     
 end
 
