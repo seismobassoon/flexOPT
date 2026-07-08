@@ -5,6 +5,7 @@ using LinearAlgebra, JLD2, StaticArrays
 safeget(A, inds...; default=0) = checkbounds(Bool, A, inds...) ? A[inds...] : default
 
 
+
 # macro to convert a variable name to a string 
 # https://discourse.julialang.org/t/can-i-use-a-function-variable-name-to-generate-a-string-to-set-it-equal-to/73659
 macro var2string(var)

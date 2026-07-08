@@ -1,21 +1,250 @@
-function numericalOperatorConstruction(params::Dict)
-    @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
-    if !hasproperty(modelFam, :modelName) || modelFam.modelName === nothing
-        modelFam = merge(modelFam, (; modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")))
+struct CouplingTable{T}
+    rows::Vector{Int32}
+    cols::Vector{Int32}
+    vals::Vector{T}
+end
+
+struct MatrixFreeNumericalOperator{T}
+    table::CouplingTable{T}
+    size::Tuple{Int,Int}
+    side::String
+    backend::Symbol
+    representation::Symbol
+    geometry
+end
+
+struct SparseNumericalOperator{T,S}
+    matrix::S
+    table::CouplingTable{T}
+    side::String
+    backend::Symbol
+    representation::Symbol
+    geometry
+end
+
+function applyNumericalOperator!(y, op::MatrixFreeNumericalOperator, x)
+    fill!(y, zero(eltype(y)))
+    rows = op.table.rows
+    cols = op.table.cols
+    vals = op.table.vals
+    @inbounds for k in eachindex(vals)
+        y[rows[k]] += vals[k] * x[cols[k]]
     end
-    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
-    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace)
-    costfunctions=costLHS.costFunctions-costRHS.costFunctions
-    fieldLHS=costLHS.場
-    fieldRHS=costRHS.場
-    champsLimité=costRHS.場
-    numOperators=(costfunctions=costfunctions,fieldLHS=fieldLHS,fieldRHS=fieldRHS,champsLimité=champsLimité)
-    return @strdict(numOperators)
+    return y
+end
+
+function applyNumericalOperator!(y, op::SparseNumericalOperator, x)
+    mul!(y, op.matrix, x)
+    return y
+end
+
+_as_symbol(x::Symbol) = x
+_as_symbol(x::AbstractString) = Symbol(x)
+
+_field_symbol(fieldSyms::AbstractArray, i) = fieldSyms[i]
+_field_symbol(fieldSyms, i) = fieldSyms
+
+function _numerical_value(x)
+    v = Symbolics.value(x)
+    return v isa Number ? v : error("non-numerical coefficient remains after material substitution: $v")
+end
+
+function _push_coupling!(rows, cols, vals, row, col, val)
+    v = _numerical_value(val)
+    iszero(v) && return nothing
+    push!(rows, Int32(row))
+    push!(cols, Int32(col))
+    push!(vals, v)
+    return nothing
+end
+
+function _finalize_numerical_operator(table::CouplingTable{T}, nrow::Int, ncol::Int, side, backend, representation, geometry) where T
+    backend_sym = _as_symbol(backend)
+    repr_sym = representation === :auto ? :sparse : _as_symbol(representation)
+
+    if backend_sym == :mpi
+        repr_sym = repr_sym == :auto ? :matrixfree : repr_sym
+        return MatrixFreeNumericalOperator(table, (nrow, ncol), side, backend_sym, repr_sym, geometry)
+    elseif repr_sym == :matrixfree
+        return MatrixFreeNumericalOperator(table, (nrow, ncol), side, backend_sym, repr_sym, geometry)
+    elseif repr_sym == :sparse || repr_sym == :blocksparse
+        A = sparse(Int.(table.rows), Int.(table.cols), table.vals, nrow, ncol)
+        if backend_sym == :cuda
+            if isdefined(Main, :CUDA)
+                A = Main.CUDA.CUSPARSE.CuSparseMatrixCSR(A)
+            else
+                @warn "backend=:cuda requested, but CUDA is not loaded in Main; returning CPU sparse matrix"
+                backend_sym = :cpu
+            end
+        elseif backend_sym != :cpu
+            throw(ArgumentError("backend must be :cpu, :cuda, or :mpi; got $backend"))
+        end
+        return SparseNumericalOperator(A, table, side, backend_sym, repr_sym, geometry)
+    else
+        throw(ArgumentError("representation must be :auto, :matrixfree, :sparse, or :blocksparse; got $representation"))
+    end
 end
 
 
 
-function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
+function numericalOperatorConstruction(params::Dict)
+    @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
+    backend = _paramget(params, :backend, :cpu)
+    representation = _paramget(params, :representation, :auto)
+    if !hasproperty(modelFam, :modelName) || modelFam.modelName === nothing
+        modelFam = merge(modelFam, (; modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")))
+    end
+    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation)
+    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation)
+    costfunctions=costLHS.costFunctions-costRHS.costFunctions
+    fieldLHS=costLHS.場
+    fieldRHS=costRHS.場
+    champsLimité=costRHS.champsLimité
+    numericalOperators=(left=costLHS.operator,right=costRHS.operator)
+    numOperators=(costfunctions=costfunctions,fieldLHS=fieldLHS,fieldRHS=fieldRHS,champsLimité=champsLimité,numericalOperators=numericalOperators)
+    return @strdict(numOperators)
+end
+
+function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing,
+    backend=:cpu,        # :cpu, :cuda, :mpi
+    representation=:auto # :matrixfree, :sparse, :blocksparse
+)
+
+    numericalGeometry = prepareNumericalOperatorGeometry(optRec,modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+
+    @unpack νWhole, νGeometry, νRelative, localPointsIndices,
+        ModelPoints, Models, maskingField, conv,
+        timePointsUsedForOneStep, activeTimePoints, wholeMin, wholeMax,
+        modelMin, wholeRegionPointsSpace = numericalGeometry
+
+    @unpack lhs, rhs, numbersOfTheSystem, fieldNames = optRec["recette"]
+    @unpack fields, extfields = fieldNames
+    @unpack NtypeofExpr, NtypeofFields, NtypeofMaterialVariables = numbersOfTheSystem.numbersOfTheSystemL
+
+    if side == "left"
+        symA = lhs.Ajiννᶜ
+        varM = lhs.varM
+        fieldSyms = fields
+    elseif side == "right"
+        symA = rhs.Γjiννᶜ
+        varM = rhs.varF
+        fieldSyms = extfields
+    else
+        throw(ArgumentError("side must be \"left\" or \"right\", got $side"))
+    end
+
+    fieldLinearIndices = LinearIndices(
+        (NtypeofFields, activeTimePoints, Tuple(wholeRegionPointsSpace)...)
+    )
+    residualLinearIndices = LinearIndices((NtypeofExpr, length(νWhole)))
+
+    rows = Int32[]
+    cols = Int32[]
+    vals = Float64[]
+
+    for iTestFunctions in eachindex(νWhole)
+        νtmpWhole = νWhole[iTestFunctions]
+        iGeometry = νGeometry[iTestFunctions]
+        localPointsHere = localPointsIndices[iGeometry]
+        middlepointHere = νRelative[iTestFunctions]
+        localPointsSpaceHere = carDropDim.(localPointsHere)
+        localPointsSpaceIndicesHere = CartesianIndices(Tuple(localPointsSpaceHere[end]))
+        middlepointSpaceHere = svec2car(carDropDim(middlepointHere))
+        iTimeMax = timePointsUsedForOneStep[iGeometry]
+
+        νᶜtmpWhole = localPointsSpaceIndicesHere .+ (νtmpWhole .- middlepointSpaceHere)
+        νᶜtmpModel = conv.whole2model.(νᶜtmpWhole)
+        localLinearIndices = LinearIndices(Tuple(localPointsHere[end]))
+
+        materialMapping = Dict()
+        for iT in 1:iTimeMax
+            for iVar in 1:NtypeofMaterialVariables
+                spaceModelBouncedPoints = ModelPoints[1:end-1, iVar]
+                iiT = ModelPoints[end, iVar] > 1 ? iT : 1
+                νᶜtmpModelTruncated = BouncingCoordinates.(νᶜtmpModel, Ref(spaceModelBouncedPoints))
+
+                for jPoint in νᶜtmpWhole
+                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
+                    jPointTLocal = carAddDim(jPointLocal, iT)
+                    linearjPointTLocal = localLinearIndices[jPointTLocal]
+                    materialMapping[varM[iVar, linearjPointTLocal]] =
+                        Models[iVar][carAddDim(νᶜtmpModelTruncated[jPointLocal], iiT)]
+                end
+            end
+        end
+
+        for iExpr in 1:NtypeofExpr
+            row = residualLinearIndices[iExpr, iTestFunctions]
+
+            for iT in 1:iTimeMax
+                for jPoint in νᶜtmpWhole
+                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
+                    jPointTLocal = carAddDim(jPointLocal, iT)
+                    linearjPointTLocal = localLinearIndices[jPointTLocal]
+
+                    jPointInWhole = is_all_less_than_or_equal(wholeMin, jPoint) &&
+                                    is_all_less_than_or_equal(jPoint, wholeMax)
+                    boundaryWeight = 0.0
+
+                    if jPointInWhole
+                        jPointModel = conv.whole2model(jPoint)
+                        jPointInModel =
+                            is_all_less_than_or_equal(modelMin, jPointModel) &&
+                            is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+
+                        if jPointInModel || iT == iTimeMax
+                            boundaryWeight = 1.0
+                        else
+                            distance2 = distance2_point_to_box(
+                                jPointModel,
+                                modelMin,
+                                vec2car(ModelPoints[1:end-1, 1]),
+                            )
+                            boundaryWeight = CerjanBoundaryCondition(distance2)
+                        end
+                    end
+
+                    weight = jPointInWhole ? maskingField[jPoint] * boundaryWeight : 0.0
+                    iszero(weight) && continue
+
+                    for iField in 1:NtypeofFields
+                        col = fieldLinearIndices[iField, iT, Tuple(jPoint)...]
+                        coef = weight * substitute(symA[linearjPointTLocal, iField, iExpr, iGeometry], materialMapping)
+                        _push_coupling!(rows, cols, vals, row, col, coef)
+                    end
+                end
+            end
+        end
+    end
+
+    table = CouplingTable(rows, cols, vals)
+    nrow = NtypeofExpr * length(νWhole)
+    ncol = NtypeofFields * activeTimePoints * length(νWhole)
+    operator = _finalize_numerical_operator(table, nrow, ncol, side, backend, representation, numericalGeometry)
+
+    fieldArrays = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
+    for iT in 1:activeTimePoints
+        for iField in 1:NtypeofFields
+            fieldArrays[iField, iT] = reshape(
+                [_field_symbol(fieldSyms, iField) for _ in 1:length(νWhole)],
+                Tuple(wholeRegionPointsSpace),
+            )
+        end
+    end
+
+    costFunctions = operator isa SparseNumericalOperator ? operator.matrix : operator
+    return (
+        costFunctions = costFunctions,
+        operator = operator,
+        couplingTable = table,
+        場 = fieldArrays,
+        champsLimité = nothing,
+        geometry = numericalGeometry,
+    )
+end
+
+
+function numericalOperatorConstruction_too_heavy(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing)
 
     #region general introduction
     #
@@ -87,7 +316,8 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     # one operator per test point in space, for now
     NtestfunctionsInSpace = length(νWhole)
     costFunctions = Array{Any,2}(undef, NtypeofExpr, NtestfunctionsInSpace)
-    costFunctions .= 0
+    #costFunctionsCoefs = Array{Number,6}(undef, NtestfunctionsInSpace, NtypeofFields, NtypeofExpr, iTimeMax, NtestfunctionsInSpace)
+    costFunctionsCoefs .= 0
     Threads.@threads for iTestFunctions in eachindex(νWhole)
 
         localCost = Array{Any,1}(undef,NtypeofExpr)
@@ -166,6 +396,8 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
                             localCost[iExpr] += 
                                 場[iField, iT][jPoint] * maskingField[jPoint] *
                                 substitute(symA[linearjPointTLocal,iField,iExpr,iGeometry],tmpMapping)
+
+                            #costFunctionsCoefs[jPoint] += NtypeofFields,  NtypeofExpr,iTimeMax, NtestfunctionsInSpace)
                         else
                             if iT == iTimeMax
                                 #tmpMapping[Ulocal[linearjPointTLocal, iField]] =

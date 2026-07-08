@@ -2,6 +2,10 @@ using DrWatson, JLD2
 using SHA
 using FilePathsBase: mkpath
 
+# optional parameters to be obtained
+_paramget(params::Dict, name::Symbol, default) = get(params, String(name), get(params, name, default))
+
+
 function hash_parameters(params)
     # Serialize as string and hash
     filtered = Dict(k => v for (k,v) in params)
