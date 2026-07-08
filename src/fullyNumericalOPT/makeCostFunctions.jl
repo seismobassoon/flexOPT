@@ -1,3 +1,5 @@
+using SparseArrays
+
 struct CouplingTable{T}
     rows::Vector{Int32}
     cols::Vector{Int32}
@@ -33,6 +35,23 @@ function applyNumericalOperator!(y, op::MatrixFreeNumericalOperator, x)
     return y
 end
 
+function Base.:-(left::MatrixFreeNumericalOperator{TL}, right::MatrixFreeNumericalOperator{TR}) where {TL,TR}
+    left.size == right.size || throw(DimensionMismatch("matrix-free operators must have the same size"))
+    T = promote_type(TL, TR)
+    rows = vcat(left.table.rows, right.table.rows)
+    cols = vcat(left.table.cols, right.table.cols)
+    vals = vcat(T.(left.table.vals), .-T.(right.table.vals))
+    table = CouplingTable(rows, cols, vals)
+    return MatrixFreeNumericalOperator(
+        table,
+        left.size,
+        "$(left.side)-$(right.side)",
+        left.backend,
+        left.representation,
+        left.geometry,
+    )
+end
+
 function applyNumericalOperator!(y, op::SparseNumericalOperator, x)
     mul!(y, op.matrix, x)
     return y
@@ -49,13 +68,46 @@ function _numerical_value(x)
     return v isa Number ? v : error("non-numerical coefficient remains after material substitution: $v")
 end
 
-function _push_coupling!(rows, cols, vals, row, col, val)
+function _coefficient_vector(coefficient_type)
+    type_sym = _as_symbol(coefficient_type)
+    if type_sym == :auto || type_sym == :float || type_sym == :float64
+        return Float64[]
+    elseif type_sym == :complex || type_sym == :complex64 || type_sym == :complexf64
+        return ComplexF64[]
+    else
+        throw(ArgumentError("coefficient_type must be :auto, :float64, or :complexf64; got $coefficient_type"))
+    end
+end
+
+function _push_coupling!(rows, cols, vals::Vector{Float64}, row, col, val)
     v = _numerical_value(val)
-    iszero(v) && return nothing
+    iszero(v) && return vals
+
+    if v isa Complex
+        if iszero(imag(v))
+            v = real(v)
+        else
+            vals_complex = ComplexF64.(vals)
+            push!(rows, Int32(row))
+            push!(cols, Int32(col))
+            push!(vals_complex, ComplexF64(v))
+            return vals_complex
+        end
+    end
+
     push!(rows, Int32(row))
     push!(cols, Int32(col))
-    push!(vals, v)
-    return nothing
+    push!(vals, Float64(v))
+    return vals
+end
+
+function _push_coupling!(rows, cols, vals::Vector{ComplexF64}, row, col, val)
+    v = _numerical_value(val)
+    iszero(v) && return vals
+    push!(rows, Int32(row))
+    push!(cols, Int32(col))
+    push!(vals, ComplexF64(v))
+    return vals
 end
 
 function _finalize_numerical_operator(table::CouplingTable{T}, nrow::Int, ncol::Int, side, backend, representation, geometry) where T
@@ -91,23 +143,25 @@ function numericalOperatorConstruction(params::Dict)
     @unpack optRec,modelFam,absorbingBoundaries,maskedRegionInSpace=params
     backend = _paramget(params, :backend, :cpu)
     representation = _paramget(params, :representation, :auto)
+    coefficient_type = _paramget(params, :coefficient_type, :auto)
     if !hasproperty(modelFam, :modelName) || modelFam.modelName === nothing
         modelFam = merge(modelFam, (; modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")))
     end
-    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation)
-    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation)
+    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type)
+    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type)
     costfunctions=costLHS.costFunctions-costRHS.costFunctions
     fieldLHS=costLHS.場
     fieldRHS=costRHS.場
     champsLimité=costRHS.champsLimité
-    numericalOperators=(left=costLHS.operator,right=costRHS.operator)
+    numericalOperators=(left=costLHS.operator,right=costRHS.operator,residual=costfunctions)
     numOperators=(costfunctions=costfunctions,fieldLHS=fieldLHS,fieldRHS=fieldRHS,champsLimité=champsLimité,numericalOperators=numericalOperators)
     return @strdict(numOperators)
 end
 
 function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing,
     backend=:cpu,        # :cpu, :cuda, :mpi
-    representation=:auto # :matrixfree, :sparse, :blocksparse
+    representation=:auto, # :matrixfree, :sparse, :blocksparse
+    coefficient_type=:auto # :auto, :float64, :complexf64
 )
 
     numericalGeometry = prepareNumericalOperatorGeometry(optRec,modelFam,side; absorbingBoundaries, maskedRegionInSpace)
@@ -140,7 +194,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     rows = Int32[]
     cols = Int32[]
-    vals = Float64[]
+    vals = _coefficient_vector(coefficient_type)
 
     for iTestFunctions in eachindex(νWhole)
         νtmpWhole = νWhole[iTestFunctions]
@@ -210,7 +264,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
                     for iField in 1:NtypeofFields
                         col = fieldLinearIndices[iField, iT, Tuple(jPoint)...]
                         coef = weight * substitute(symA[linearjPointTLocal, iField, iExpr, iGeometry], materialMapping)
-                        _push_coupling!(rows, cols, vals, row, col, coef)
+                        vals = _push_coupling!(rows, cols, vals, row, col, coef)
                     end
                 end
             end
