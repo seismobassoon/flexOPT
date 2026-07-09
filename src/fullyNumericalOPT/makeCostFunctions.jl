@@ -137,6 +137,71 @@ function _finalize_numerical_operator(table::CouplingTable{T}, nrow::Int, ncol::
     end
 end
 
+struct CoefficientRecipe{F,V}
+    vars::V
+    f::F
+    constant::Any
+end
+
+struct ComplexCoefficientRecipe{R,I}
+    real_recipe::R
+    imag_recipe::I
+end
+
+function _compile_coefficient_recipe(expr::Complex)
+    return ComplexCoefficientRecipe(
+        _compile_coefficient_recipe(real(expr)),
+        _compile_coefficient_recipe(imag(expr)),
+    )
+end
+
+function _compile_coefficient_recipe(expr)
+    vars = collect(Symbolics.get_variables(expr))
+    if isempty(vars)
+        return CoefficientRecipe(vars, nothing, _numerical_value(expr))
+    end
+    f = Symbolics.build_function(expr, vars; expression=Val(false))
+    return CoefficientRecipe(vars, f, nothing)
+end
+
+function _compile_coefficient_recipes(symA)
+    cache = IdDict{Any,Any}()
+    recipes = Array{Any}(undef, size(symA))
+    for idx in eachindex(symA)
+        expr = symA[idx]
+        recipes[idx] = get!(cache, expr) do
+            _compile_coefficient_recipe(expr)
+        end
+    end
+    return recipes
+end
+
+function _evaluate_recipe(recipe::CoefficientRecipe, materialMapping::Dict)
+    if isempty(recipe.vars)
+        return recipe.constant
+    end
+    return recipe.f((materialMapping[v] for v in recipe.vars)...)
+end
+
+function _evaluate_recipe(recipe::ComplexCoefficientRecipe, materialMapping::Dict)
+    return complex(
+        _evaluate_recipe(recipe.real_recipe, materialMapping),
+        _evaluate_recipe(recipe.imag_recipe, materialMapping),
+    )
+end
+
+function _make_field_arrays(fieldSyms, NtypeofFields, activeTimePoints, νWhole, wholeRegionPointsSpace)
+    fieldArrays = Array{Any,2}(undef, NtypeofFields, activeTimePoints)
+    for iT in 1:activeTimePoints
+        for iField in 1:NtypeofFields
+            fieldArrays[iField, iT] = reshape(
+                [_field_symbol(fieldSyms, iField) for _ in 1:length(νWhole)],
+                Tuple(wholeRegionPointsSpace),
+            )
+        end
+    end
+    return fieldArrays
+end
 
 
 function numericalOperatorConstruction(params::Dict)
@@ -144,11 +209,12 @@ function numericalOperatorConstruction(params::Dict)
     backend = _paramget(params, :backend, :cpu)
     representation = _paramget(params, :representation, :auto)
     coefficient_type = _paramget(params, :coefficient_type, :auto)
+    compatibility_outputs = _paramget(params, :compatibility_outputs, false)
     if !hasproperty(modelFam, :modelName) || modelFam.modelName === nothing
         modelFam = merge(modelFam, (; modelName = "model_" * Dates.format(now(), "yyyymmdd_HHMMSS")))
     end
-    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type)
-    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type)
+    costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type,compatibility_outputs=compatibility_outputs)
+    costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type,compatibility_outputs=compatibility_outputs)
     costfunctions=costLHS.costFunctions-costRHS.costFunctions
     fieldLHS=costLHS.場
     fieldRHS=costRHS.場
@@ -159,6 +225,145 @@ function numericalOperatorConstruction(params::Dict)
 end
 
 function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing,
+    backend=:cpu,        # :cpu, :cuda, :mpi
+    representation=:auto, # :matrixfree, :sparse, :blocksparse
+    coefficient_type=:auto, # :auto, :float64, :complexf64
+    compatibility_outputs=false
+)
+
+    numericalGeometry = prepareNumericalOperatorGeometry(optRec,modelFam,side; absorbingBoundaries, maskedRegionInSpace)
+
+    @unpack νWhole, νGeometry, νRelative, localPointsIndices,
+        ModelPoints, Models, maskingField, conv,
+        timePointsUsedForOneStep, activeTimePoints, wholeMin, wholeMax,
+        modelMin, wholeRegionPointsSpace = numericalGeometry
+
+    @unpack lhs, rhs, numbersOfTheSystem, fieldNames = optRec["recette"]
+    @unpack fields, extfields = fieldNames
+    @unpack NtypeofExpr, NtypeofFields, NtypeofMaterialVariables = numbersOfTheSystem.numbersOfTheSystemL
+
+    if side == "left"
+        symA = lhs.Ajiννᶜ
+        varM = lhs.varM
+        fieldSyms = fields
+    elseif side == "right"
+        symA = rhs.Γjiννᶜ
+        varM = rhs.varF
+        fieldSyms = extfields
+    else
+        throw(ArgumentError("side must be \"left\" or \"right\", got $side"))
+    end
+
+    coefficientRecipes = _compile_coefficient_recipes(symA)
+    fieldLinearIndices = LinearIndices(
+        (NtypeofFields, activeTimePoints, Tuple(wholeRegionPointsSpace)...)
+    )
+    residualLinearIndices = LinearIndices((NtypeofExpr, length(νWhole)))
+
+    rows = Int32[]
+    cols = Int32[]
+    vals = _coefficient_vector(coefficient_type)
+
+    for iTestFunctions in eachindex(νWhole)
+        νtmpWhole = νWhole[iTestFunctions]
+        iGeometry = νGeometry[iTestFunctions]
+        localPointsHere = localPointsIndices[iGeometry]
+        middlepointHere = νRelative[iTestFunctions]
+        localPointsSpaceHere = carDropDim.(localPointsHere)
+        localPointsSpaceIndicesHere = CartesianIndices(Tuple(localPointsSpaceHere[end]))
+        middlepointSpaceHere = svec2car(carDropDim(middlepointHere))
+        iTimeMax = timePointsUsedForOneStep[iGeometry]
+
+        νᶜtmpWhole = localPointsSpaceIndicesHere .+ (νtmpWhole .- middlepointSpaceHere)
+        νᶜtmpModel = conv.whole2model.(νᶜtmpWhole)
+        localLinearIndices = LinearIndices(Tuple(localPointsHere[end]))
+
+        materialMapping = Dict{Any,Any}()
+        for iT in 1:iTimeMax
+            for iVar in 1:NtypeofMaterialVariables
+                spaceModelBouncedPoints = ModelPoints[1:end-1, iVar]
+                iiT = ModelPoints[end, iVar] > 1 ? iT : 1
+                νᶜtmpModelTruncated = BouncingCoordinates.(νᶜtmpModel, Ref(spaceModelBouncedPoints))
+
+                for jPoint in νᶜtmpWhole
+                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
+                    jPointTLocal = carAddDim(jPointLocal, iT)
+                    linearjPointTLocal = localLinearIndices[jPointTLocal]
+                    materialMapping[varM[iVar, linearjPointTLocal]] =
+                        Models[iVar][carAddDim(νᶜtmpModelTruncated[jPointLocal], iiT)]
+                end
+            end
+        end
+
+        for iExpr in 1:NtypeofExpr
+            row = residualLinearIndices[iExpr, iTestFunctions]
+
+            for iT in 1:iTimeMax
+                for jPoint in νᶜtmpWhole
+                    jPointLocal = jPoint - νtmpWhole + middlepointSpaceHere
+                    jPointTLocal = carAddDim(jPointLocal, iT)
+                    linearjPointTLocal = localLinearIndices[jPointTLocal]
+
+                    jPointInWhole = is_all_less_than_or_equal(wholeMin, jPoint) &&
+                                    is_all_less_than_or_equal(jPoint, wholeMax)
+                    boundaryWeight = 0.0
+
+                    if jPointInWhole
+                        jPointModel = conv.whole2model(jPoint)
+                        jPointInModel =
+                            is_all_less_than_or_equal(modelMin, jPointModel) &&
+                            is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+
+                        if jPointInModel || iT == iTimeMax
+                            boundaryWeight = 1.0
+                        else
+                            distance2 = distance2_point_to_box(
+                                jPointModel,
+                                modelMin,
+                                vec2car(ModelPoints[1:end-1, 1]),
+                            )
+                            boundaryWeight = CerjanBoundaryCondition(distance2)
+                        end
+                    end
+
+                    weight = jPointInWhole ? maskingField[jPoint] * boundaryWeight : 0.0
+                    iszero(weight) && continue
+
+                    for iField in 1:NtypeofFields
+                        col = fieldLinearIndices[iField, iT, Tuple(jPoint)...]
+                        recipe = coefficientRecipes[linearjPointTLocal, iField, iExpr, iGeometry]
+                        coef = weight * _evaluate_recipe(recipe, materialMapping)
+                        vals = _push_coupling!(rows, cols, vals, row, col, coef)
+                    end
+                end
+            end
+        end
+    end
+
+    table = CouplingTable(rows, cols, vals)
+    nrow = NtypeofExpr * length(νWhole)
+    ncol = NtypeofFields * activeTimePoints * length(νWhole)
+    operator = _finalize_numerical_operator(table, nrow, ncol, side, backend, representation, numericalGeometry)
+    costFunctions = operator isa SparseNumericalOperator ? operator.matrix : operator
+
+    fieldArrays = compatibility_outputs ?
+        _make_field_arrays(fieldSyms, NtypeofFields, activeTimePoints, νWhole, wholeRegionPointsSpace) :
+        nothing
+
+    return (
+        costFunctions = costFunctions,
+        operator = operator,
+        couplingTable = table,
+        fields = fieldArrays,
+        場 = fieldArrays,
+        champsLimité = nothing,
+        geometry = numericalGeometry,
+        coefficientRecipes = coefficientRecipes,
+    )
+end
+
+
+function numericalOperaotrConstruction_slow_due_to_substitute_iteration(optRec,modelFam,side;absorbingBoundaries=nothing,maskedRegionInSpace=nothing,
     backend=:cpu,        # :cpu, :cuda, :mpi
     representation=:auto, # :matrixfree, :sparse, :blocksparse
     coefficient_type=:auto # :auto, :float64, :complexf64

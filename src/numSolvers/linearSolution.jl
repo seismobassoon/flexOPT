@@ -9,7 +9,127 @@ using DrWatson
 # using CairoMakie
 # CairoMakie.activate!()
 
+
+_numop_get(x, name::Symbol, default=nothing) = x isa AbstractDict ? get(x, String(name), get(x, name, default)) : (hasproperty(x, name) ? getproperty(x, name) : default)
+
+function _linear_indices_from_operator(op)
+    geometry = op.geometry
+    NpointsSpace = length(geometry.νWhole)
+    activeTimePoints = geometry.activeTimePoints
+    spaceShape = Tuple(geometry.wholeRegionPointsSpace)
+    return NpointsSpace, activeTimePoints, spaceShape
+end
+
+function _split_operator_columns(op, NField, NpointsSpace, activeTimePoints, spaceShape, target)
+    nEq = op.size[1]
+    if target == :unknown
+        nCol = NpointsSpace * NField
+    elseif target == :knownfield
+        nCol = NpointsSpace * NField * max(activeTimePoints - 1, 0)
+    elseif target == :knownforce
+        nCol = NpointsSpace * NField * activeTimePoints
+    else
+        throw(ArgumentError("unknown target $target"))
+    end
+
+    rows = Int[]
+    cols = Int[]
+    vals = eltype(op.table.vals)[]
+    fieldTimeSpace = CartesianIndices((NField, activeTimePoints, spaceShape...))
+    pointLinear = LinearIndices(spaceShape)
+
+    for k in eachindex(op.table.vals)
+        ci = fieldTimeSpace[Int(op.table.cols[k])]
+        iField = ci[1]
+        iT = ci[2]
+        jPoint = CartesianIndex(Tuple(ci)[3:end])
+        lp = pointLinear[jPoint]
+
+        if target == :unknown
+            iT == activeTimePoints || continue
+            col = lp + (iField - 1) * NpointsSpace
+        elseif target == :knownfield
+            iT < activeTimePoints || continue
+            col = lp + (iField - 1) * NpointsSpace + (iT - 1) * NpointsSpace * NField
+        else
+            col = lp + (iField - 1) * NpointsSpace + (iT - 1) * NpointsSpace * NField
+        end
+
+        push!(rows, Int(op.table.rows[k]))
+        push!(cols, col)
+        push!(vals, op.table.vals[k])
+    end
+
+    return sparse(rows, cols, vals, nEq, nCol)
+end
+
+function prepareNumericalLinearSystem(numOperators; T=Float64)
+    numericalOperators = _numop_get(numOperators, :numericalOperators)
+    numericalOperators === nothing && error("numOperators does not contain numericalOperators")
+
+    left = _numop_get(numericalOperators, :left)
+    right = _numop_get(numericalOperators, :right)
+    left === nothing && error("numOperators.numericalOperators.left is missing")
+    right === nothing && error("numOperators.numericalOperators.right is missing")
+
+    NpointsSpace, activeTimePoints, spaceShape = _linear_indices_from_operator(left)
+    NField = div(left.size[2], NpointsSpace * activeTimePoints)
+    timePointsUsedForOneStep = activeTimePoints
+    NknownTime = max(timePointsUsedForOneStep - 1, 0)
+    NforcePoints = NpointsSpace
+
+    A_unknown = _split_operator_columns(left, NField, NpointsSpace, activeTimePoints, spaceShape, :unknown)
+    L_known = _split_operator_columns(left, NField, NpointsSpace, activeTimePoints, spaceShape, :knownfield)
+    R_force = _split_operator_columns(right, NField, NpointsSpace, activeTimePoints, spaceShape, :knownforce)
+
+    b_template = zeros(promote_type(T, eltype(left.table.vals), eltype(right.table.vals)), left.size[1])
+    known_lhs_template = zeros(eltype(b_template), NpointsSpace, NField, NknownTime)
+    known_rhs_template = zeros(eltype(b_template), NforcePoints, NField, timePointsUsedForOneStep)
+
+    function b_fun!(b, knownInputs)
+        nKnownField = length(known_lhs_template)
+        knownFieldVec = @view knownInputs[1:nKnownField]
+        knownForceVec = @view knownInputs[nKnownField+1:nKnownField+length(known_rhs_template)]
+        b .= 0
+        if nKnownField > 0
+            mul!(b, L_known, knownFieldVec, -one(eltype(b)), one(eltype(b)))
+        end
+        mul!(b, R_force, knownForceVec, one(eltype(b)), one(eltype(b)))
+        return b
+    end
+
+    function A_fun!(avec, knownInputs)
+        avec .= vec(A_unknown)
+        return avec
+    end
+
+    return (
+        is_numerical = true,
+        residual_operator = _numop_get(numericalOperators, :residual),
+        left_operator = left,
+        right_operator = right,
+        A_unknown = A_unknown,
+        L_known = L_known,
+        R_force = R_force,
+        A_fun! = A_fun!,
+        b_fun! = b_fun!,
+        A_template = copy(A_unknown),
+        b_template = b_template,
+        known_lhs_template = known_lhs_template,
+        known_rhs_template = known_rhs_template,
+        spaceShape = spaceShape,
+        NpointsSpace = NpointsSpace,
+        NforcePoints = NforcePoints,
+        NField = NField,
+        timePointsUsedForOneStep = timePointsUsedForOneStep,
+    )
+end
+
 function prepareLinearSystem(numOperators; T=Float64)
+    if _numop_get(numOperators, :numericalOperators) !== nothing
+        return prepareNumericalLinearSystem(numOperators; T=T)
+    end
+
     @unpack costfunctions, fieldLHS, fieldRHS, champsLimité = numOperators
 
     costvec = vec(costfunctions)
@@ -126,8 +246,12 @@ function makeLinearEvaluator(prepared)
         knownInputs[1:nKnownField] .= vec(knownField)
         knownInputs[nKnownField+1:nKnownField+nKnownForce] .= vec(knownForce)
 
-        prepared.A_fun!(vec(A), knownInputs)
-        prepared.b_fun!(b, knownInputs)
+        if hasproperty(prepared, :is_numerical) && prepared.is_numerical
+            prepared.b_fun!(b, knownInputs)
+        else
+            prepared.A_fun!(vec(A), knownInputs)
+            prepared.b_fun!(b, knownInputs)
+        end
         return A, b
     end
 
@@ -175,6 +299,8 @@ function prepareConstantMatrix(preparedLin;
 
     if sparse_output
         A = sparse(A)
+    elseif hasproperty(preparedLin, :is_numerical) && preparedLin.is_numerical
+        A = Matrix(A)
     end
 
     if boundaryConditionForced
@@ -236,8 +362,11 @@ function timeMarchingSchemeLinear(
             prepend!(sourceTime, zeros(timePointsUsedForOneStep))
         end
     elseif sourceType == "Explicit"
-        expected = (NforcePoints, NField, Nt)
-        size(sourceFull) == expected || error("sourceFull should have size $expected")
+        size(sourceFull, 1) == NforcePoints || error("sourceFull first dimension should be NforcePoints=$NforcePoints")
+        size(sourceFull, 2) == NField || error("sourceFull second dimension should be NField=$NField")
+        minimumTimeSamples = Nt + timePointsUsedForOneStep - 1
+        size(sourceFull, 3) >= minimumTimeSamples ||
+            error("sourceFull third dimension should be at least $minimumTimeSamples for Nt=$Nt and timePointsUsedForOneStep=$timePointsUsedForOneStep")
     end
 
     if !isfile(sequentialFileName)
@@ -282,7 +411,7 @@ function timeMarchingSchemeLinear(
                 end
             else
                 eval!(Awork, b, knownField, knownForce)
-                A = sparse_output ? sparse(Awork) : copy(Awork)
+                A = sparse_output ? sparse(Awork) : (hasproperty(preparedLin, :is_numerical) && preparedLin.is_numerical ? Matrix(Awork) : copy(Awork))
                 if boundaryConditionForced
                     applyBoundaryConditionForced!(A, b; leftValue=1.0, rightValue=1.0)
                 end
