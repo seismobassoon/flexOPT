@@ -63,7 +63,7 @@ function read_neutrino_flux_table(filename::String, nEbins::Int, nθbins::Int, h
     -, nuflux_antiνe_interp = interpolate_flux_at_bin_centers(energies, nuflux_antiνe, true)
 
 
-    
+
     return bin_centers, nuflux_νe_interp, nuflux_νμ_interp, nuflux_antiνe_interp, nuflux_antiνμ_interp, energies, nuflux_νe, nuflux_νμ, nuflux_antiνe, nuflux_antiνμ
 
 end
@@ -84,6 +84,8 @@ A tuple containing:
 1. `bin_centers`: The calculated centers of the energy bins.
 2. `interpolated_flux`: The flux evaluated at the bin centers.
 """
+
+
 function interpolate_flux_at_bin_centers(energies::Vector{Float64}, flux::Matrix{Float64}, energies_in_log::Bool)
 
     # create 1D coordinate array for the y axis
