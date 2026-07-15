@@ -1,1 +1,1 @@
-DEFAULT_PLANET = Ref(:Earth) 
+DEFAULT_FLUX_TABLE = Ref(:Daemon) # or Honda 
