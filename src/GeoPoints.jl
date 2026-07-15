@@ -33,6 +33,7 @@ module GeoPoints
     export p_ECEF_to_local, p_local_to_ECEF, p_ECEF_to_local2D
     export GeoPoint, +, -, /, *
     export GeoPointSet,GeoPoints_to_local
+    export rotation_between_geopoints, transform_geopoints
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
     export getParamsAndTopo,getParamsWithoutTopo #, interpolate_params, GMTprecision

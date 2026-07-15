@@ -255,6 +255,8 @@ function makeLocalCoordinateUnitVectors(p1::SVector{3,Float64},p2::SVector{3,Flo
     return R
 end
 
+
+
 p_ECEF_to_local(p_3D::SVector{3,Float64},pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) = R' * (p_3D - pOrigin)
 
 function p_ECEF_to_local2D(p_3D::SVector{3,Float64},pOrigin::SVector{3,Float64},R::SMatrix{3,3,Float64}) 
@@ -481,6 +483,77 @@ function enuBasis(p0::GeoPoint)
     )
 
     return east, north, up
+end
+
+"""
+    rotation_between_geopoints(p1, p2;
+        source_planet=:Earth, target_planet=:SphericalEarth)
+
+Return the rotation that maps ECEF vectors expressed in the local east-north-up
+frame at `p1` to ECEF vectors in the local east-north-up frame at `p2`.
+
+The points are reconstructed with the requested ellipsoids because `GeoPoint`
+does not store which ellipsoid was used to create it.
+"""
+function rotation_between_geopoints(
+    p1::GeoPoint,
+    p2::GeoPoint;
+    source_planet::Symbol=:Earth,
+    target_planet::Symbol=:Earth,
+)
+    source_origin = GeoPoint(
+        p1.lat, p1.lon;
+        alt=p1.alt,
+        ell=planet_ellipsoid(source_planet),
+    )
+    target_origin = GeoPoint(
+        p2.lat, p2.lon;
+        alt=p2.alt,
+        ell=planet_ellipsoid(target_planet),
+    )
+
+    source_basis = SMatrix{3,3,Float64}(hcat(enuBasis(source_origin)...))
+    target_basis = SMatrix{3,3,Float64}(hcat(enuBasis(target_origin)...))
+
+    return target_basis * source_basis'
+end
+
+"""
+    transform_geopoints(points, p1, p2;
+        source_planet=:Earth, target_planet=:SphericalEarth)
+
+Rigidly move an array of `GeoPoint`s from the local frame centred at `p1` to
+the local frame centred at `p2`. Local east-north-up offsets are preserved,
+and the returned points use the target planet's ellipsoid. The output has the
+same shape as `points`.
+"""
+function transform_geopoints(
+    points::AbstractArray{<:GeoPoint},
+    p1::GeoPoint,
+    p2::GeoPoint;
+    source_planet::Symbol=:Earth,
+    target_planet::Symbol=:Earth,
+)
+    source_ellipsoid = planet_ellipsoid(source_planet)
+    target_ellipsoid = planet_ellipsoid(target_planet)
+    source_origin = GeoPoint(p1.lat, p1.lon; alt=p1.alt, ell=source_ellipsoid)
+    target_origin = GeoPoint(p2.lat, p2.lon; alt=p2.alt, ell=target_ellipsoid)
+    rotation = rotation_between_geopoints(
+        source_origin,
+        target_origin;
+        source_planet=source_planet,
+        target_planet=target_planet,
+    )
+
+    return map(points) do point
+        source_point = GeoPoint(
+            point.lat, point.lon;
+            alt=point.alt,
+            ell=source_ellipsoid,
+        )
+        target_ecef = target_origin.ecef + rotation * (source_point.ecef - source_origin.ecef)
+        GeoPoint(target_ecef; ell=target_ellipsoid)
+    end
 end
 
 function localENU(p::GeoPoint, p0::GeoPoint)

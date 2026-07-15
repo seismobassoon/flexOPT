@@ -36,6 +36,7 @@ module Neurthino
     include("Neurthino/Oscillation.jl")
     include("Neurthino/NeurthinoRelated.jl")
     include("Neurthino/flavourAngles.jl")
+    include("Neurthino/LamyLucasSalome.jl")
     #include("Neurthino/Matter.jl")
     #include("Neurthino/earthModels2Dor3D.jl")
     #include("Neurthino/Earthmodels.jl")

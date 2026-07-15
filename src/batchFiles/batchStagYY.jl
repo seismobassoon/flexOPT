@@ -496,6 +496,7 @@ end
 
 
 
+
 function readStagYYFilesAverage(file)
     magic, inputILEN, byte_reverse_in, io=read_magic(file)
     magic,nval = evaluate_nval_from_magicNumber(magic)
@@ -588,16 +589,11 @@ function readStagYYFilesAverage(file)
         @error "cartesian format: not yet developed"
     end
 
-    
-
-
    #coord[1,ix,iy,iz] = r[iz]*sin(theta)*cos(phi)
    #coord[2,ix,iy,iz] = r[iz]*sin(theta)*sin(phi)
    #coord[3,ix,iy,iz] = r[iz]*cos(theta)
    
    
-   
-
    #field = binRead(io,floatDataType,(nx)*(ny)*(nz))
    #field = binRead(io,Float64,nx*ny*nz)
    #rawField =field
@@ -676,6 +672,7 @@ function readStagYYFilesAverage(file)
         end
         #@show size(avNewField)
         diffNewField = newField .- avNewField
+        #Création de diffpfield 
         newField=reshape(newField,(ny+2)*(nz+2))
         avNewField=reshape(avNewField,(ny+2)*(nz+2))
         diffNewField=reshape(diffNewField,(ny+2)*(nz+2))
@@ -687,6 +684,7 @@ function readStagYYFilesAverage(file)
    #fieldInterpolated=interpolate(nodes,newField,Gridded(Linear()))
 
 end
+
 
 
 function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iCheckCoreModel=true)
