@@ -132,11 +132,15 @@ function WYYKKIntegralPureSymbolic(params::Dict)
 
     # Computing WYYKK
 
-    WYYKK=CompactSymbolicFunctions(Yμ.b.nodes,1;auxDims=(l_n_max+1, lᶜ_nᶜ_max+1, length(μs),length(μᶜs),length(ν)),variables=Yμ.b.variables)
+    referenceCSF = Kμ.k
+    WYYKK=CompactSymbolicFunctions(referenceCSF.nodes,1;auxDims=(l_n_max+1, lᶜ_nᶜ_max+1, length(μs),length(μᶜs),length(ν)),variables=referenceCSF.variables)
 
-    # note that W and Ys are computed on the fly without DrWatson (for the moment) 
-    # therefore, boxcar functions should be properly called
-    # however, we need to be careful with further developments around this 
+    # For maximumOrder == -1, constructBsplineFamily returns nothing.
+    # This means an indicator/box support in this integral; numerically the
+    # multiplicative B-spline factor is one on the compact support represented
+    # by the Taylor kernel segments.
+    bspline_factor(family, iFunction, derivSlot, orderSlot) =
+        family === nothing ? 1 : family.b.data[:, iFunction, derivSlot, orderSlot]
 
     YorderSlotμᶜ = maximum((YorderBspline1Dμᶜ + 1,1)) # for Yorder = -1 : just boxcar
     YorderSlotμ = maximum((YorderBspline1Dμ + 1,1)) # for Yorder = -1 : just boxcar
@@ -144,18 +148,19 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     orderSlot = maximum((orderBspline1D + 1,1)) # for order = -1 : just boxcar
     derivSlot = 1 # no derivatives
 
-    if Wν !== nothing
-        for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
-            l_n_slot=l_n+1
-            lᶜ_nᶜ_slot = lᶜ_nᶜ+1
-            WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Wν.b.data[:,iν,derivSlot,orderSlot].*Yμᶜ.b.data[:,iμᶜ,derivSlot,YorderSlotμᶜ].*Yμ.b.data[:,iμ,derivSlot,YorderSlotμ].*Kμᶜ.k.data[:,iμᶜ,lᶜ_nᶜ_slot].*Kμ.k.data[:,iμ,l_n_slot])
-        end
-    else
-        for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
-            l_n_slot=l_n+1
-            lᶜ_nᶜ_slot = lᶜ_nᶜ+1
-            WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(Yμᶜ.b.data[:,iν,derivSlot,YorderSlotμᶜ].*Yμ.b.data[:,iν,derivSlot,YorderSlotμ].*Kμᶜ.k.data[:,iν,lᶜ_nᶜ_slot].*Kμ.k.data[:,iν,l_n_slot])
-        end
+    for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
+        l_n_slot=l_n+1
+        lᶜ_nᶜ_slot = lᶜ_nᶜ+1
+        Wfactor = bspline_factor(Wν, iν, derivSlot, orderSlot)
+        YcFactor = bspline_factor(Yμᶜ, iμᶜ, derivSlot, YorderSlotμᶜ)
+        YFactor = bspline_factor(Yμ, iμ, derivSlot, YorderSlotμ)
+        WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(
+            Wfactor .*
+            YcFactor .*
+            YFactor .*
+            Kμᶜ.k.data[:,iμᶜ,lᶜ_nᶜ_slot] .*
+            Kμ.k.data[:,iμ,l_n_slot]
+        )
     end
 
 
