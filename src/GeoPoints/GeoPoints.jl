@@ -316,14 +316,14 @@ end
 
 
 
-function constructLocalBox(p0::GeoPoint,Δx::Float64,Δz::Float64,横行きMin::Float64,横行きMax::Float64,altMin::Float64,altMax::Float64;axis_angle_deg=90.0)
+function constructLocalBox(p0::GeoPoint,Δx::Float64,Δz::Float64,横行きMin::Float64,横行きMax::Float64,altMin::Float64,altMax::Float64;axis_angle_deg=90.0,centreOption="p0")
     # axis_angle_deg: 0=north, 90: east
 
     # 2D
     Δy = 1.0 # in metre as a dummy
     奥行きMin=0.0 # y axis range
     奥行きMax=1.0
-    output =constructLocalBox(p0,Δx,Δy,Δz,横行きMin,横行きMax,奥行きMin,奥行きMax,altMin,altMax;axis_angle_deg=axis_angle_deg)
+    output =constructLocalBox(p0,Δx,Δy,Δz,横行きMin,横行きMax,奥行きMin,奥行きMax,altMin,altMax;axis_angle_deg=axis_angle_deg,centreOption=centreOption)
     allGridsInGeoPoints = output.allGridsInGeoPoints[:,1,:]
     allGridsInCartesian = localCoord2D.(output.allGridsInCartesian[:,1,:])
     effectiveRadii = output.effectiveRadii[:,1,:]
@@ -331,7 +331,7 @@ function constructLocalBox(p0::GeoPoint,Δx::Float64,Δz::Float64,横行きMin::
             Nx=output.Nx,Ny=output.Ny,Nz=output.Nz,Δx=output.Δx,Δy=output.Δy,Δz=output.Δz,pOriginECEF=output.pOriginECEF,rotationMatrix=output.rotationMatrix)
 end
 
-function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,横行きMin::Float64,横行きMax::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;axis_angle_deg=90.0)
+function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,横行きMin::Float64,横行きMax::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;axis_angle_deg=90.0,centreOption="p0")
 
     # axis_angle_deg: 0=north, 90: east
     
@@ -359,7 +359,7 @@ function constructLocalBox(p0::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,�
     p2 = p0 + 横行きMax*axisVector
     p2 = GeoPoint(p2.lat,p2.lon)
 
-    return constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=横行きMin,rightLimit=横行きMax,centreOption="p0",p0=p0)
+    return constructLocalBox(p1,p2,Δx,Δy,Δz,奥行きMin,奥行きMax,altMin,altMax;leftLimit=横行きMin,rightLimit=横行きMax,centreOption=centreOption,p0=p0)
     
 end
 
@@ -382,7 +382,7 @@ end
 
 
 function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,Δz::Float64,奥行きMin::Float64,奥行きMax::Float64,altMin::Float64,altMax::Float64;leftLimit::Float64=0.0,rightLimit::Float64=(p2-p1).radius,centreOption="middle",p0=nothing)
-
+    @show centreOption
 
     # 3D
 
@@ -402,7 +402,8 @@ function constructLocalBox(p1::GeoPoint,p2::GeoPoint,Δx::Float64,Δy::Float64,�
         xOrigin = 0.0
     elseif centreOption == "centreOfPlanet"
         pOrigin = SVector(0.0,0.0,0.0)
-        xOrigin = -(p2-p1).radius/2.0
+        xOrigin = 0.0
+        #xOrigin = -(p2-p1).radius/2.0
     end
 
     pCentre = SVector(0.0,0.0,0.0) # This is the default centre of the planet to measure the local vertical vectors
