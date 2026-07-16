@@ -74,17 +74,18 @@ function prepareNumericalLinearSystem(numOperators; T=Float64)
 
     NpointsSpace, activeTimePoints, spaceShape = _linear_indices_from_operator(left)
     NField = div(left.size[2], NpointsSpace * activeTimePoints)
+    NForceField = div(right.size[2], NpointsSpace * activeTimePoints)
     timePointsUsedForOneStep = activeTimePoints
     NknownTime = max(timePointsUsedForOneStep - 1, 0)
     NforcePoints = NpointsSpace
 
     A_unknown = _split_operator_columns(left, NField, NpointsSpace, activeTimePoints, spaceShape, :unknown)
     L_known = _split_operator_columns(left, NField, NpointsSpace, activeTimePoints, spaceShape, :knownfield)
-    R_force = _split_operator_columns(right, NField, NpointsSpace, activeTimePoints, spaceShape, :knownforce)
+    R_force = _split_operator_columns(right, NForceField, NpointsSpace, activeTimePoints, spaceShape, :knownforce)
 
     b_template = zeros(promote_type(T, eltype(left.table.vals), eltype(right.table.vals)), left.size[1])
     known_lhs_template = zeros(eltype(b_template), NpointsSpace, NField, NknownTime)
-    known_rhs_template = zeros(eltype(b_template), NforcePoints, NField, timePointsUsedForOneStep)
+    known_rhs_template = zeros(eltype(b_template), NforcePoints, NForceField, timePointsUsedForOneStep)
 
     function b_fun!(b, knownInputs)
         nKnownField = length(known_lhs_template)
@@ -121,6 +122,7 @@ function prepareNumericalLinearSystem(numOperators; T=Float64)
         NpointsSpace = NpointsSpace,
         NforcePoints = NforcePoints,
         NField = NField,
+        NForceField = NForceField,
         timePointsUsedForOneStep = timePointsUsedForOneStep,
     )
 end
@@ -341,6 +343,7 @@ function timeMarchingSchemeLinear(
     compactFileName = datadir("fieldResults", savename("compact", (Nt, Δnum..., modelName, sourceType, experiment_name, "linear"), "jld2"))
 
     NField = preparedLin.NField
+    NForceField = hasproperty(preparedLin, :NForceField) ? preparedLin.NForceField : preparedLin.NField
     NpointsSpace = preparedLin.NpointsSpace
     NforcePoints = preparedLin.NforcePoints
     timePointsUsedForOneStep = preparedLin.timePointsUsedForOneStep
@@ -363,7 +366,7 @@ function timeMarchingSchemeLinear(
         end
     elseif sourceType == "Explicit"
         size(sourceFull, 1) == NforcePoints || error("sourceFull first dimension should be NforcePoints=$NforcePoints")
-        size(sourceFull, 2) == NField || error("sourceFull second dimension should be NField=$NField")
+        size(sourceFull, 2) == NForceField || error("sourceFull second dimension should be NForceField=$NForceField")
         minimumTimeSamples = Nt + timePointsUsedForOneStep - 1
         size(sourceFull, 3) >= minimumTimeSamples ||
             error("sourceFull third dimension should be at least $minimumTimeSamples for Nt=$Nt and timePointsUsedForOneStep=$timePointsUsedForOneStep")

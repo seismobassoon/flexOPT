@@ -57,6 +57,24 @@ function applyNumericalOperator!(y, op::SparseNumericalOperator, x)
     return y
 end
 
+function _residual_numerical_operator(left, right)
+    left.size[1] == right.size[1] ||
+        throw(DimensionMismatch("left and right numerical operators must have the same number of rows"))
+    T = promote_type(eltype(left.table.vals), eltype(right.table.vals))
+    rows = vcat(left.table.rows, right.table.rows)
+    cols = vcat(left.table.cols, Int32.(right.table.cols .+ left.size[2]))
+    vals = vcat(T.(left.table.vals), .-T.(right.table.vals))
+    table = CouplingTable(rows, cols, vals)
+    return MatrixFreeNumericalOperator(
+        table,
+        (left.size[1], left.size[2] + right.size[2]),
+        "$(left.side)-$(right.side)",
+        left.backend,
+        :matrixfree,
+        (left=left.geometry, right=right.geometry),
+    )
+end
+
 _as_symbol(x::Symbol) = x
 _as_symbol(x::AbstractString) = Symbol(x)
 
@@ -215,7 +233,7 @@ function numericalOperatorConstruction(params::Dict)
     end
     costLHS=numericalOperatorConstruction(optRec,modelFam,"left";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type,compatibility_outputs=compatibility_outputs)
     costRHS=numericalOperatorConstruction(optRec,modelFam,"right";absorbingBoundaries=absorbingBoundaries,maskedRegionInSpace=maskedRegionInSpace,backend=backend,representation=representation,coefficient_type=coefficient_type,compatibility_outputs=compatibility_outputs)
-    costfunctions=costLHS.costFunctions-costRHS.costFunctions
+    costfunctions=_residual_numerical_operator(costLHS.operator,costRHS.operator)
     fieldLHS=costLHS.場
     fieldRHS=costRHS.場
     champsLimité=costRHS.champsLimité
@@ -240,19 +258,23 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     @unpack lhs, rhs, numbersOfTheSystem, fieldNames = optRec["recette"]
     @unpack fields, extfields = fieldNames
-    @unpack NtypeofExpr, NtypeofFields, NtypeofMaterialVariables = numbersOfTheSystem.numbersOfTheSystemL
 
     if side == "left"
+        numbersSide = numbersOfTheSystem.numbersOfTheSystemL
         symA = lhs.Ajiννᶜ
         varM = lhs.varM
         fieldSyms = fields
     elseif side == "right"
+        numbersSide = numbersOfTheSystem.numbersOfTheSystemR
         symA = rhs.Γjiννᶜ
         varM = rhs.varF
         fieldSyms = extfields
     else
         throw(ArgumentError("side must be \"left\" or \"right\", got $side"))
     end
+
+    @unpack NtypeofExpr, NtypeofFields = numbersSide
+    NtypeofCoefficientVariables = size(varM, 1)
 
     coefficientRecipes = _compile_coefficient_recipes(symA)
     fieldLinearIndices = LinearIndices(
@@ -280,7 +302,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
         materialMapping = Dict{Any,Any}()
         for iT in 1:iTimeMax
-            for iVar in 1:NtypeofMaterialVariables
+            for iVar in 1:min(NtypeofCoefficientVariables, length(Models))
                 spaceModelBouncedPoints = ModelPoints[1:end-1, iVar]
                 iiT = ModelPoints[end, iVar] > 1 ? iT : 1
                 νᶜtmpModelTruncated = BouncingCoordinates.(νᶜtmpModel, Ref(spaceModelBouncedPoints))
@@ -378,19 +400,23 @@ function numericalOperaotrConstruction_slow_due_to_substitute_iteration(optRec,m
 
     @unpack lhs, rhs, numbersOfTheSystem, fieldNames = optRec["recette"]
     @unpack fields, extfields = fieldNames
-    @unpack NtypeofExpr, NtypeofFields, NtypeofMaterialVariables = numbersOfTheSystem.numbersOfTheSystemL
 
     if side == "left"
+        numbersSide = numbersOfTheSystem.numbersOfTheSystemL
         symA = lhs.Ajiννᶜ
         varM = lhs.varM
         fieldSyms = fields
     elseif side == "right"
+        numbersSide = numbersOfTheSystem.numbersOfTheSystemR
         symA = rhs.Γjiννᶜ
         varM = rhs.varF
         fieldSyms = extfields
     else
         throw(ArgumentError("side must be \"left\" or \"right\", got $side"))
     end
+
+    @unpack NtypeofExpr, NtypeofFields = numbersSide
+    NtypeofCoefficientVariables = size(varM, 1)
 
     fieldLinearIndices = LinearIndices(
         (NtypeofFields, activeTimePoints, Tuple(wholeRegionPointsSpace)...)
@@ -550,7 +576,10 @@ function numericalOperatorConstruction_too_heavy(optRec,modelFam,side;absorbingB
 
     @unpack fields, extfields = fieldNames
     
-    @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
+    numbersL = numbersOfTheSystem.numbersOfTheSystemL
+    numbersSide = side == "left" ? numbersOfTheSystem.numbersOfTheSystemL : numbersOfTheSystem.numbersOfTheSystemR
+    @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofMaterialVariables = numbersL
+    NtypeofFields = numbersSide.NtypeofFields
     
     nConfigurations=numbersOfTheSystem.nConfigurations
 
@@ -726,7 +755,10 @@ function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBounda
 
     
 
-    @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofFields,NtypeofMaterialVariables=numbersOfTheSystem.numbersOfTheSystemL
+    numbersL = numbersOfTheSystem.numbersOfTheSystemL
+    numbersSide = side == "left" ? numbersOfTheSystem.numbersOfTheSystemL : numbersOfTheSystem.numbersOfTheSystemR
+    @unpack timeMarching,nCoordinates,NtypeofExpr,NtypeofMaterialVariables = numbersL
+    NtypeofFields = numbersSide.NtypeofFields
     
     nConfigurations=numbersOfTheSystem.nConfigurations
 
