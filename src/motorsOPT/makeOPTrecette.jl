@@ -1,5 +1,7 @@
 using KernelAbstractions
 
+opt_integral_order = :ln_lc
+
 
 function TaylorOptions(itplParams,supplementaryOrder)
     options=(YorderBspace=itplParams.YorderBspace,YorderBtime=itplParams.YorderBtime,supplementaryOrder=supplementaryOrder,pointsμInSpace=itplParams.ptsSpace,pointsμInTime=itplParams.ptsTime,offsetμInΔyInSpace=itplParams.offsetSpace,offsetμInΔyInTime=itplParams.offsetTime)
@@ -214,8 +216,9 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     tableForμPoints_gpu = Adapt.adapt(backend,tableForμPoints)
     tableForμᶜPoints_gpu = Adapt.adapt(backend,tableForμᶜPoints)
     tableForLoop_gpu = Adapt.adapt(backend,tableForLoop)
-    C_gpu = Adapt.adapt(backend,Float32.(Cˡη))
-    Cᶜ_gpu = Adapt.adapt(backend,Float32.(Cˡηᶜ))
+    coefficientFloat = backend isa KernelAbstractions.CPU ? Float64 : Float32
+    C_gpu = Adapt.adapt(backend,coefficientFloat.(Cˡη))
+    Cᶜ_gpu = Adapt.adapt(backend,coefficientFloat.(Cˡηᶜ))
 
     #endregion
 
@@ -226,18 +229,18 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     # Element-wise maximum across all dimensions
     max_size = map((xs...) -> maximum(xs), all_sizes...)
 
-    int_total_float32 = Array{Float32,6}(undef, nCoordinates, max_size...)
-    int_total_float32 .= 0.f0
+    int_total = Array{coefficientFloat,6}(undef, nCoordinates, max_size...)
+    int_total .= zero(coefficientFloat)
 
     for iCoord ∈ 1:nCoordinates
         small_size = size(coefWYYKK[iCoord])
-        tmpMatrix = Float32.(coefWYYKK[iCoord])
+        tmpMatrix = coefficientFloat.(coefWYYKK[iCoord])
         tmpRange = CartesianIndices(tmpMatrix)
-        int_total_float32[iCoord,tmpRange] = tmpMatrix
+        int_total[iCoord,tmpRange] = tmpMatrix
     end
-    int_gpu = Adapt.adapt(backend,int_total_float32)
+    int_gpu = Adapt.adapt(backend,int_total)
 
-    output_gpu = Adapt.adapt(backend, zeros(Float32, nPoints, nPoints, nTotalSmallα, nGeometry))
+    output_gpu = Adapt.adapt(backend, zeros(coefficientFloat, nPoints, nPoints, nTotalSmallα, nGeometry))
 
     #endregion
 
@@ -263,9 +266,10 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     #@show typeof(tableForPoints_gpu) # must be MtlMatrix{Int32}
     #@show typeof(P) typeof(L) typeof(nDim) typeof(nα) typeof(int1max) typeof(int2max)
 
+    integralOrderFlag = (isdefined(@__MODULE__, :opt_integral_order) && opt_integral_order == :lc_ln) ? Int32(2) : Int32(1)
     kernel! = windowContraction!(backend,(8,8,8))#,128,size(output_gpu))
     kernel!(output_gpu, C_gpu, Cᶜ_gpu, int_gpu, tableForLoop_gpu,tableForμPoints_gpu,tableForμᶜPoints_gpu,
-       P,Pμᶜ,Pμ,L,nDim,nα,int1max,int2max,nGeometry_gpu,ndrange=(P,P,nα*nGeometry))
+       P,Pμᶜ,Pμ,L,nDim,nα,int1max,int2max,nGeometry_gpu,integralOrderFlag,ndrange=(P,P,nα*nGeometry))
     KernelAbstractions.synchronize(backend)
 
     # Here output_gpu[x',x,eachα] ∑μ' ∑μ ∑l' ∑ l C[x',l',μ'] C[x,l,μ] ∏_iCoord K[iCoord][l-n,l'-n',μ,μ']
@@ -314,7 +318,9 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
                     xᶜLinear = LI_points[svec2car(xᶜ)]
                     U_HERE = Ulocal[xᶜLinear,iField]                    
                     substitutedValue = substitute(nodeValue, localmapηᶜ)
-                    Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] += newCoef[xLinear,xᶜLinear,indexLinearα,iConfigGeometry] *substitutedValue
+                    # newCoef is produced by windowContraction! with axes (xᶜ, x, α, geometry).
+                    # Keep this order here; swapping x and xᶜ creates an artificial directional bias.
+                    Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] += newCoef[xᶜLinear,xLinear,indexLinearα,iConfigGeometry] * substitutedValue
                     #AjiννᶜU[iExpr,iConfigGeometry]+= Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] * U_HERE
                 end
 
@@ -334,23 +340,24 @@ end
 
 
 @kernel function windowContraction!(
-    output::AbstractArray{Float32,4},      # (P, P, nα, nGeometry)
-    C::AbstractArray{Float32,3},           # (P, L, Pμ)
-    Cc::AbstractArray{Float32,3},          # (P, L, Pμᶜ)
-    int::AbstractArray{Float32,6},         # (nDim, int1max, int1max, int2max, int2max, nGeometry)
+    output::AbstractArray{T,4},            # (P, P, nα, nGeometry)
+    C::AbstractArray{T,3},                 # (P, L, Pμ)
+    Cc::AbstractArray{T,3},                # (P, L, Pμᶜ)
+    int::AbstractArray{T,6},               # (nDim, int1max, int1max, int2max, int2max, nGeometry)
     table::AbstractArray{Int32,3},         # (2 + 2*nDim, nLoop, nα)
     tableμPoints::AbstractArray{Int32,2},  # (nDim, Pμ)
     tableμᶜPoints::AbstractArray{Int32,2}, # (nDim, Pμᶜ)
     P::Int32, Pμᶜ::Int32, Pμ::Int32, L::Int32,
-    nDim::Int32, nα::Int32, int1max::Int32, int2max::Int32, nGeometry::Int32
-)
+    nDim::Int32, nα::Int32, int1max::Int32, int2max::Int32, nGeometry::Int32,
+    integralOrderFlag::Int32
+) where {T}
     (xᶜ, x, ag) = @index(Global, NTuple)
 
     if xᶜ <= P && x <= P && ag <= nα * nGeometry
         α = Int32(((ag - 1) % nα) + 1)
         iGeometry = Int32(((ag - 1) ÷ nα) + 1)
 
-        acc = 0.0f0
+        acc = zero(T)
 
         @inbounds for idx in 1:size(table, 2)
             lᶜ = table[1, idx, α]
@@ -359,7 +366,7 @@ end
             if lᶜ > 0 && l > 0
                 for μᶜ in 1:Pμᶜ
                     for μ in 1:Pμ
-                        prod_int = 1.0f0
+                        prod_int = one(T)
 
                         for iDim in 1:nDim
                             k = table[2 + iDim, idx, α]
@@ -370,10 +377,15 @@ end
                                 m  = tableμPoints[iDim, μ]
 
                                 # coefWYYKK is indexed as (l_n, lᶜ_nᶜ, μ, μᶜ, ν).
-                                # table stores k=lᶜ-nᶜ+1 and lp=l-n+1, so read (lp, k), not (k, lp).
-                                prod_int *= int[iDim, lp, k, m, mᶜ, iGeometry]
+                                # For debugging the OPT convention, allow checking the transposed
+                                # l/lᶜ read without changing the rest of the assembly.
+                                if integralOrderFlag == Int32(2)
+                                    prod_int *= int[iDim, k, lp, m, mᶜ, iGeometry]
+                                else
+                                    prod_int *= int[iDim, lp, k, m, mᶜ, iGeometry]
+                                end
                             else
-                                prod_int = 0.0f0
+                                prod_int = zero(T)
                                 break
                             end
                         end

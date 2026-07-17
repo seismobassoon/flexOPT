@@ -2,6 +2,8 @@
 using LinearAlgebra
 using SparseArrays
 using Statistics
+using DrWatson
+using KernelAbstractions
 using CairoMakie
 CairoMakie.activate!()
 
@@ -136,7 +138,7 @@ function propagate_linear_frames_from_initial(preparedLin, initialPast, initialP
     factor = try
         lu(A)
     catch err
-        @error "A_unknown factorization failed" exception=(err, catch_backtrace()) matrix_report=implicit_matrix_report(preparedLin) diagonal_shift=diagonal_shift
+        @error "A_unknown factorization failed" exception=(err, catch_backtrace()) matrix_report=implicit_matrix_report(A) diagonal_shift=diagonal_shift
         rethrow(err)
     end
     b = copy(preparedLin.b_template)
@@ -167,22 +169,51 @@ function propagate_linear_frames_from_initial(preparedLin, initialPast, initialP
 end
 
 
-function implicit_matrix_report(preparedLin)
-    A = sparse(preparedLin.A_template)
-    diagA = abs.(diag(A))
-    row_abs = vec(sum(abs.(A); dims=2))
-    row_nnz = vec(sum(abs.(A) .> 0; dims=2))
+function implicit_matrix_report(A::SparseMatrixCSC)
+    A = sparse(A)
+    nrow, ncol = size(A)
+    rows, cols, vals = findnz(A)
+    finite_mask = isfinite.(vals)
+    finite_vals = vals[finite_mask]
+
+    row_finite_nnz = zeros(Int, nrow)
+    row_nonfinite_nnz = zeros(Int, nrow)
+    row_abs_finite = zeros(Float64, nrow)
+    for (r, v) in zip(rows, vals)
+        if isfinite(v)
+            row_finite_nnz[r] += 1
+            row_abs_finite[r] += abs(Float64(v))
+        else
+            row_nonfinite_nnz[r] += 1
+        end
+    end
+
+    diag_vals = diag(A)
+    finite_diag_abs = abs.(Float64.(diag_vals[isfinite.(diag_vals)]))
+    finite_abs = abs.(Float64.(finite_vals))
     return (
         size=size(A),
         nnz=nnz(A),
-        zero_rows=count(iszero, row_nnz),
-        diag_min=isempty(diagA) ? NaN : minimum(diagA),
-        diag_median=isempty(diagA) ? NaN : median(diagA),
-        diag_max=isempty(diagA) ? NaN : maximum(diagA),
-        row_abs_min=minimum(row_abs),
-        row_abs_max=maximum(row_abs),
+        stored_finite=length(finite_vals),
+        stored_nonfinite=count(!isfinite, vals),
+        stored_nan=count(isnan, vals),
+        stored_inf=count(isinf, vals),
+        zero_rows_finite=count(iszero, row_finite_nnz),
+        rows_with_nonfinite=count(>(0), row_nonfinite_nnz),
+        finite_abs_min=isempty(finite_abs) ? NaN : minimum(finite_abs),
+        finite_abs_median=isempty(finite_abs) ? NaN : median(finite_abs),
+        finite_abs_max=isempty(finite_abs) ? NaN : maximum(finite_abs),
+        diag_finite_count=length(finite_diag_abs),
+        diag_nonfinite_count=count(!isfinite, diag_vals),
+        diag_abs_min=isempty(finite_diag_abs) ? NaN : minimum(finite_diag_abs),
+        diag_abs_median=isempty(finite_diag_abs) ? NaN : median(finite_diag_abs),
+        diag_abs_max=isempty(finite_diag_abs) ? NaN : maximum(finite_diag_abs),
+        finite_row_abs_min=isempty(row_abs_finite) ? NaN : minimum(row_abs_finite),
+        finite_row_abs_max=isempty(row_abs_finite) ? NaN : maximum(row_abs_finite),
     )
 end
+
+implicit_matrix_report(preparedLin) = implicit_matrix_report(sparse(preparedLin.A_template))
 
 function wavefield_snapshot_report(frames)
     rows = NamedTuple[]
@@ -309,14 +340,22 @@ end
 
 function build_toy_opt_prepared(; velocity_value=2600.0, shape=(201,201), dx=100.0, cfl=0.45,
     famousEquationType="2DacousticTime", pointsInSpace=3, pointsInTime=3, supplementaryOrder=2,
-    orderBspace=1, orderBtime=1)
+    orderBspace=1, orderBtime=1, recipe_backend=CPU())
     velocity = fill(Float64(velocity_value), shape)
     dt = cfl * dx / velocity_value
     delta = (dx, dx, dt)
     fieldItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=0, YorderBtime=0)
     materItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=0, YorderBtime=0)
     params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
-    optRec = Main.flexOPT.makeOPTsemiSymbolic(params)
+    old_backend = Main.flexOPT.backend
+    if recipe_backend !== nothing
+        Main.flexOPT.backend = recipe_backend
+    end
+    optRec = try
+        Main.flexOPT.makeOPTsemiSymbolic(params)
+    finally
+        Main.flexOPT.backend = old_backend
+    end
     recette = optRec["recette"]
     modelPoints = Main.flexOPT.getModelPoints(velocity, pointsInTime, recette.numbersOfTheSystem.numbersOfTheSystemL.timeMarching)
     modelFam = (models=[velocity], modelPoints=modelPoints, Δ=delta, modelName="toy_OPT_gaussian_drift")
@@ -325,4 +364,94 @@ function build_toy_opt_prepared(; velocity_value=2600.0, shape=(201,201), dx=100
     numOps = numOpt["numOperators"]
     prepared = Main.flexOPT.prepareLinearSystem(numOps)
     return (; velocity, delta, optRec, numOps, prepared)
+end
+
+
+function time_role_from_slot(iT, activeTimePoints)
+    iT == activeTimePoints && return :future
+    iT == activeTimePoints - 1 && return :present
+    return Symbol("past_", activeTimePoints - iT)
+end
+
+function recipe_local_index_audit(optRec; geometry=1)
+    recette = optRec isa AbstractDict ? optRec["recette"] : optRec.recette
+    nodes = recette.nodes[geometry]
+    centre_linear = recette.centresIndices[geometry]
+    centre_point = nodes[centre_linear]
+    activeTimePoints = size(nodes, ndims(nodes))
+    LI = LinearIndices(nodes)
+    rows = NamedTuple[]
+    for I in CartesianIndices(nodes)
+        p = nodes[I]
+        offset = Tuple(Int.(p .- centre_point))
+        iT = Int(p[end])
+        push!(rows, (
+            linear=LI[I],
+            cartesian_index=Tuple(I),
+            local_point=Tuple(Int.(p)),
+            offset=offset,
+            spatial_offset=offset[1:end-1],
+            time_slot=iT,
+            time_role=time_role_from_slot(iT, activeTimePoints),
+        ))
+    end
+    return rows
+end
+
+function operator_stencil_at_point(op, point::CartesianIndex; iExpr=1, iField=1, atol=0.0)
+    geometry = op.geometry
+    spaceShape = Tuple(geometry.wholeRegionPointsSpace)
+    NpointsSpace = length(geometry.νWhole)
+    activeTimePoints = geometry.activeTimePoints
+    Nexpr = div(op.size[1], NpointsSpace)
+    Nfield = div(op.size[2], NpointsSpace * activeTimePoints)
+    pointLinear = LinearIndices(spaceShape)
+    fieldTimeSpace = CartesianIndices((Nfield, activeTimePoints, spaceShape...))
+    row = LinearIndices((Nexpr, NpointsSpace))[iExpr, pointLinear[point]]
+
+    rows = NamedTuple[]
+    for k in eachindex(op.table.vals)
+        Int(op.table.rows[k]) == row || continue
+        ci = fieldTimeSpace[Int(op.table.cols[k])]
+        Int(ci[1]) == iField || continue
+        coef = op.table.vals[k]
+        abs(coef) > atol || continue
+        jPoint = CartesianIndex(Tuple(ci)[3:end])
+        offset = Tuple(jPoint - point)
+        iT = Int(ci[2])
+        push!(rows, (
+            time_slot=iT,
+            time_role=time_role_from_slot(iT, activeTimePoints),
+            offset=offset,
+            coef=coef,
+            abscoef=abs(coef),
+            col=Int(op.table.cols[k]),
+        ))
+    end
+    sort!(rows, by = r -> (r.time_slot, r.offset...))
+    return rows
+end
+
+function operator_stencil_at_point(numOps::NamedTuple, point::CartesianIndex; which=:left, iExpr=1, iField=1, atol=0.0)
+    op = which == :left ? numOps.numericalOperators.left :
+         which == :right ? numOps.numericalOperators.right :
+         which == :residual ? numOps.numericalOperators.residual :
+         error("which must be :left, :right, or :residual")
+    return operator_stencil_at_point(op, point; iExpr=iExpr, iField=iField, atol=atol)
+end
+
+function stencil_time_summary(stencil_rows)
+    out = NamedTuple[]
+    for iT in sort(unique(r.time_slot for r in stencil_rows))
+        rs = filter(r -> r.time_slot == iT, stencil_rows)
+        push!(out, (
+            time_slot=iT,
+            time_role=rs[1].time_role,
+            n=length(rs),
+            sumcoef=sum(r.coef for r in rs),
+            sumabs=sum(r.abscoef for r in rs),
+            maxabs=maximum(r.abscoef for r in rs),
+        ))
+    end
+    return out
 end
