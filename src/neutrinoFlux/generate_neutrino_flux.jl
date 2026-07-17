@@ -21,6 +21,17 @@ A tuple of four `nEbins` × `nθbins` Matrices representing the flux for:
 3. `antiνe` - Electron antineutrino
 4. `antiνμ` - Muon antineutrino
 """
+
+
+function read_neutrino_flux_table(params::Dict)
+    # have a look on function makeOPTsemiSymbolic(params::Dict)
+    @unpack filename, nEbins, nθbins = params
+    # see how to deal with the case where you don't need smth3
+    #bin_centers, nuflux_νe_interp, nuflux_νμ_interp, nuflux_antiνe_interp, nuflux_antiνμ_interp, energies, nuflux_νe, nuflux_νμ, nuflux_antiνe, nuflux_antiνμ = read_neutrino_flux_table(filename,nEbis, nθbins, has_header)
+    output = @strdict .....
+    return output
+end
+
 function read_neutrino_flux_table(filename::String, nEbins::Int, nθbins::Int, has_header::Bool; data_dir= joinpath(@__DIR__, "..", "data"))
 
     # construct path
@@ -61,8 +72,6 @@ function read_neutrino_flux_table(filename::String, nEbins::Int, nθbins::Int, h
     -, nuflux_antiνμ_interp = interpolate_flux_at_bin_centers(energies, nuflux_antiνμ, true)
     -, nuflux_νe_interp     = interpolate_flux_at_bin_centers(energies, nuflux_νe, true)
     -, nuflux_antiνe_interp = interpolate_flux_at_bin_centers(energies, nuflux_antiνe, true)
-
-
 
     return bin_centers, nuflux_νe_interp, nuflux_νμ_interp, nuflux_antiνe_interp, nuflux_antiνμ_interp, energies, nuflux_νe, nuflux_νμ, nuflux_antiνe, nuflux_antiνμ
 
