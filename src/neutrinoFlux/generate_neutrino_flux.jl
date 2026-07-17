@@ -25,10 +25,10 @@ A tuple of four `nEbins` × `nθbins` Matrices representing the flux for:
 
 function read_neutrino_flux_table(params::Dict)
     # have a look on function makeOPTsemiSymbolic(params::Dict)
-    @unpack filename, nEbins, nθbins = params
+    #@unpack filename, nEbins, nθbins = params
     # see how to deal with the case where you don't need smth3
     #bin_centers, nuflux_νe_interp, nuflux_νμ_interp, nuflux_antiνe_interp, nuflux_antiνμ_interp, energies, nuflux_νe, nuflux_νμ, nuflux_antiνe, nuflux_antiνμ = read_neutrino_flux_table(filename,nEbis, nθbins, has_header)
-    output = @strdict .....
+    #output = @strdict .....
     return output
 end
 
