@@ -217,15 +217,43 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
         end
     end
 
-    # here we do the famous ill-posed inversion (ttttttt) 
-    
-    aa=transpose(tmpTaylorExpansionCoeffs)*tmpTaylorExpansionCoeffs
-    aa=Num2Float64.(aa)
-    typeof(aa),aa,size(aa)
-    invaa= myInv(aa)
-    tmpCˡηlocal=invaa*transpose(tmpTaylorExpansionCoeffs)
+    # Use a scaled SVD pseudo-inverse of the rectangular Taylor matrix directly.
+    # This avoids forming normal equations A'A, which square the condition number
+    # and can break x/y symmetry for high supplementaryOrder.
+    A = Num2Float64.(tmpTaylorExpansionCoeffs)
+    tmpCˡηlocal = stableTaylorPseudoInverse(A)
 
     return tmpCˡηlocal
+end
+
+function stableTaylorPseudoInverse(A; rtol=sqrt(eps(Float64)), ridge=0.0)
+    A = Matrix{Float64}(A)
+
+    rowScale = vec(maximum(abs.(A); dims=2))
+    colScale = vec(maximum(abs.(A); dims=1))
+    rowScale .= ifelse.(rowScale .== 0.0, 1.0, rowScale)
+    colScale .= ifelse.(colScale .== 0.0, 1.0, colScale)
+
+    As = A ./ rowScale
+    As = As ./ colScale'
+
+    F = svd(As)
+    cutoff = rtol * maximum(F.S)
+    Sinv = similar(F.S)
+    for i in eachindex(F.S)
+        if F.S[i] <= cutoff
+            Sinv[i] = 0.0
+        elseif ridge > 0
+            Sinv[i] = F.S[i] / (F.S[i]^2 + ridge^2)
+        else
+            Sinv[i] = inv(F.S[i])
+        end
+    end
+
+    pinv_scaled = F.Vt' * Diagonal(Sinv) * F.U'
+
+    # If As = Dr^{-1} * A * Dc^{-1}, then pinv(A) = Dc^{-1} * pinv(As) * Dr^{-1}.
+    return (pinv_scaled ./ colScale) ./ rowScale'
 end
 
 function numbersOfTheExpression(equationCharacteristics,

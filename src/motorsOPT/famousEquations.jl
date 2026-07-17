@@ -300,7 +300,7 @@ function famousEquation(::Val{:eq_2DacousticHomoTime})
     # 2D wave equation with double couple source
     @variables v  u(x,y,t) f(x,y,t)
     
-    exprs =  ∂t²(u)- v^2 *(∂x²(u) - ∂y²(u))
+    exprs =  ∂t²(u)- v^2 *(∂x²(u) + ∂y²(u))
     fields=u
     vars = v
 

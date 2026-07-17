@@ -122,11 +122,13 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
 
     @show typeof(μPoints), μPoints[1], typeof(pointsIndices)
 
-    coefInversionDict = @strdict multiOrdersIndices pointsIndices μpointsIndices=μPoints Δ=Δnum
+    coefInversionDict = Dict{String,Any}(@strdict multiOrdersIndices pointsIndices μpointsIndices=μPoints Δ=Δnum)
+    coefInversionDict["pinv_version"] = "scaled_svd_v1"
     output=myProduceOrLoad(TaylorCoefInversion,coefInversionDict,"taylorCoefInv")
     Cˡη=output["CˡηGlobal"]
 
-    coefInversionDict = @strdict multiOrdersIndices pointsIndices μpointsIndices=μᶜPoints Δ=Δnum
+    coefInversionDict = Dict{String,Any}(@strdict multiOrdersIndices pointsIndices μpointsIndices=μᶜPoints Δ=Δnum)
+    coefInversionDict["pinv_version"] = "scaled_svd_v1"
     output=myProduceOrLoad(TaylorCoefInversion,coefInversionDict,"taylorCoefInv")
     Cˡηᶜ=output["CˡηGlobal"]
 
@@ -266,7 +268,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
        P,Pμᶜ,Pμ,L,nDim,nα,int1max,int2max,nGeometry_gpu,ndrange=(P,P,nα*nGeometry))
     KernelAbstractions.synchronize(backend)
 
-    # Here output_gpu[x',x,eachα] ∑μ' ∑μ ∑l' ∑ l C[x',l',μ'] C[x,l,μ] ∏_iCoord K[iCoord][μ',μ,l'-n',l-n]
+    # Here output_gpu[x',x,eachα] ∑μ' ∑μ ∑l' ∑ l C[x',l',μ'] C[x,l,μ] ∏_iCoord K[iCoord][l-n,l'-n',μ,μ']
     # with (n',n) depends on eachα and x=η+μ0
 
     @show "GPU computation of Ajiννᶜ: done"
@@ -367,7 +369,9 @@ end
                                 mᶜ = tableμᶜPoints[iDim, μᶜ]
                                 m  = tableμPoints[iDim, μ]
 
-                                prod_int *= int[iDim, k, lp, m, mᶜ, iGeometry]
+                                # coefWYYKK is indexed as (l_n, lᶜ_nᶜ, μ, μᶜ, ν).
+                                # table stores k=lᶜ-nᶜ+1 and lp=l-n+1, so read (lp, k), not (k, lp).
+                                prod_int *= int[iDim, lp, k, m, mᶜ, iGeometry]
                             else
                                 prod_int = 0.0f0
                                 break

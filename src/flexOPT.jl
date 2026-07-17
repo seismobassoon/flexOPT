@@ -2,6 +2,7 @@ module flexOPT
 
     using Symbolics,UnPack,Tullio
     using Dates
+    using LinearAlgebra
     using KernelAbstractions
     using ..commonBatchs
     using Adapt
