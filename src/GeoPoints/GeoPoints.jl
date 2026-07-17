@@ -518,6 +518,22 @@ function rotation_between_geopoints(
     return target_basis * source_basis'
 end
 
+function theta_phi_shift(R, p1::GeoPoint)
+    _, _, up1 = enuBasis(p1)
+    up2 = normalize(R * up1)
+
+    θ1 = acosd(clamp(up1[3], -1.0, 1.0))
+    φ1 = atan(up1[2], up1[1]) * 180 / π
+
+    θ2 = acosd(clamp(up2[3], -1.0, 1.0))
+    φ2 = atan(up2[2], up2[1]) * 180 / π
+
+    Δθ = θ2 - θ1
+    Δφ = mod(φ2 - φ1 + 180, 360) - 180
+
+    return (; Δθ, Δφ, θ1, φ1, θ2, φ2)
+end
+
 """
     transform_geopoints(points, p1, p2;
         source_planet=:Earth, target_planet=:SphericalEarth)
@@ -545,6 +561,8 @@ function transform_geopoints(
         target_planet=target_planet,
     )
 
+    angles = theta_phi_shift(rotation,source_origin)
+
     return map(points) do point
         source_point = GeoPoint(
             point.lat, point.lon;
@@ -553,7 +571,8 @@ function transform_geopoints(
         )
         target_ecef = target_origin.ecef + rotation * (source_point.ecef - source_origin.ecef)
         GeoPoint(target_ecef; ell=target_ellipsoid)
-    end
+    end,
+    angles
 end
 
 function localENU(p::GeoPoint, p0::GeoPoint)

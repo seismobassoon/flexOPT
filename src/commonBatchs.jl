@@ -3,12 +3,14 @@ module commonBatchs
     # batch files
     using Symbolics
     using StaticArrays
+    using interpolations
   
     include("batchFiles/batchDrWatson.jl")
     include("batchFiles/batchImages.jl")
     include("batchFiles/batchUseful.jl")
     include("batchFiles/batchStagYY.jl")
     include("batchFiles/batchSymbolics.jl")
+    include("batchFiles/batchInterpolations.jl")
 
     export SVector, @SVector
     export myProduceOrLoad,lazyProduceOrLoad, @strdict, @unpack

@@ -497,7 +497,7 @@ end
 
 
 
-function readStagYYFilesAverage(file)
+function readStagYYFilesAverage(file;θshift=0.0, ϕshift=0.0)
     magic, inputILEN, byte_reverse_in, io=read_magic(file)
     magic,nval = evaluate_nval_from_magicNumber(magic)
     intDataType,floatDataType,dx,dy,nx,ny,nz,nb,nnx,nny,nnz,nnb,rcmb,iStep,time,zc,boolSpherical=read_header(io,inputILEN,magic)
@@ -521,8 +521,8 @@ function readStagYYFilesAverage(file)
         # these are the grid points including the boundaries
         r = rcmb .+ zc[1,1:nz+1]
         
-        theta = (collect(1:1:nx+1) .- (nx+1)) .* dx .+ 0.5*π
-        phi = (collect(1:1:ny+1) .- (ny+1)) .* dy
+        theta = (collect(1:1:nx+1) .- (nx+1)) .* dx .+ 0.5*π .+ θshift
+        phi = (collect(1:1:ny+1) .- (ny+1)) .* dy .+ ϕshift
         
 
         # these are the midpoints 
