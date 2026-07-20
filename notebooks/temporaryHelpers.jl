@@ -560,6 +560,220 @@ function taylor_C_moment_report(optRec, delta; side=:lhs, geometry=1, mu_index=1
 end
 
 
+
+function prepare_fd2d_acoustic_fd5_baseline(velocity, delta; source_scale=:dt2)
+    spaceShape = size(velocity)
+    length(spaceShape) == 2 || error("FD5 acoustic helper currently expects a 2D velocity model")
+    dx, dz, dt = Float64.(delta)
+    nPoints = prod(spaceShape)
+    LI = LinearIndices(spaceShape)
+
+    rowsA = Int[]; colsA = Int[]; valsA = Float64[]
+    rowsL = Int[]; colsL = Int[]; valsL = Float64[]
+    rowsR = Int[]; colsR = Int[]; valsR = Float64[]
+    col_known(point, it) = point + (it - 1) * nPoints
+    wx = Dict(-2 => -1 / (12dx^2), -1 => 4 / (3dx^2), 0 => -5 / (2dx^2), 1 => 4 / (3dx^2), 2 => -1 / (12dx^2))
+    wz = Dict(-2 => -1 / (12dz^2), -1 => 4 / (3dz^2), 0 => -5 / (2dz^2), 1 => 4 / (3dz^2), 2 => -1 / (12dz^2))
+
+    for I in CartesianIndices(spaceShape)
+        p = LI[I]
+        vdt2 = Float64(velocity[I])^2 * dt^2
+        i, j = Tuple(I)
+
+        push!(rowsA, p); push!(colsA, p); push!(valsA, 1.0)
+        push!(rowsL, p); push!(colsL, col_known(p, 1)); push!(valsL, 1.0)
+        push!(rowsL, p); push!(colsL, col_known(p, 2)); push!(valsL, -2.0 - vdt2 * (wx[0] + wz[0]))
+
+        for ox in (-2, -1, 1, 2)
+            ii = i + ox
+            1 <= ii <= spaceShape[1] || continue
+            q = LI[CartesianIndex(ii, j)]
+            push!(rowsL, p); push!(colsL, col_known(q, 2)); push!(valsL, -vdt2 * wx[ox])
+        end
+        for oz in (-2, -1, 1, 2)
+            jj = j + oz
+            1 <= jj <= spaceShape[2] || continue
+            q = LI[CartesianIndex(i, jj)]
+            push!(rowsL, p); push!(colsL, col_known(q, 2)); push!(valsL, -vdt2 * wz[oz])
+        end
+
+        rscale = source_scale == :dt2 ? dt^2 : Float64(source_scale)
+        push!(rowsR, p); push!(colsR, p); push!(valsR, rscale)
+    end
+
+    A_unknown = sparse(rowsA, colsA, valsA, nPoints, nPoints)
+    L_known = sparse(rowsL, colsL, valsL, nPoints, 2nPoints)
+    R_force = sparse(rowsR, colsR, valsR, nPoints, nPoints * 3)
+    b_template = zeros(Float64, nPoints)
+    known_lhs_template = zeros(Float64, nPoints, 1, 2)
+    known_rhs_template = zeros(Float64, nPoints, 1, 3)
+
+    function b_fun!(b, knownInputs)
+        nKnownField = length(known_lhs_template)
+        knownFieldVec = @view knownInputs[1:nKnownField]
+        knownForceVec = @view knownInputs[nKnownField+1:nKnownField+length(known_rhs_template)]
+        b .= 0.0
+        mul!(b, L_known, knownFieldVec, -1.0, 1.0)
+        mul!(b, R_force, knownForceVec, 1.0, 1.0)
+        return b
+    end
+
+    function A_fun!(avec, knownInputs)
+        avec .= vec(A_unknown)
+        return avec
+    end
+
+    return (
+        is_numerical=true,
+        is_fd2d_acoustic_fd5=true,
+        A_unknown=A_unknown,
+        L_known=L_known,
+        R_force=R_force,
+        A_fun! = A_fun!,
+        b_fun! = b_fun!,
+        A_template=copy(A_unknown),
+        b_template=b_template,
+        known_lhs_template=known_lhs_template,
+        known_rhs_template=known_rhs_template,
+        spaceShape=spaceShape,
+        NpointsSpace=nPoints,
+        NforcePoints=nPoints,
+        NField=1,
+        NForceField=1,
+        timePointsUsedForOneStep=3,
+    )
+end
+
+function prepare_fd2d_elastic_homogeneous_baseline(rho, lambda, mu, delta; source_scale=:dt2)
+    spaceShape = size(rho)
+    size(lambda) == spaceShape || error("lambda should have size $spaceShape")
+    size(mu) == spaceShape || error("mu should have size $spaceShape")
+    length(spaceShape) == 2 || error("elastic FD helper currently expects 2D arrays")
+    maximum(abs, rho .- rho[1]) <= sqrt(eps(Float64)) * max(abs(rho[1]), 1.0) || error("this helper is for homogeneous rho")
+    maximum(abs, lambda .- lambda[1]) <= sqrt(eps(Float64)) * max(abs(lambda[1]), 1.0) || error("this helper is for homogeneous lambda")
+    maximum(abs, mu .- mu[1]) <= sqrt(eps(Float64)) * max(abs(mu[1]), 1.0) || error("this helper is for homogeneous mu")
+
+    dx, dz, dt = Float64.(delta)
+    ρ = Float64(rho[1]); λ = Float64(lambda[1]); μ = Float64(mu[1])
+    ax = dt^2 / ρ
+    nPoints = prod(spaceShape)
+    NField = 2
+    LI = LinearIndices(spaceShape)
+    rowidx(field, point) = point + (field - 1) * nPoints
+    col_known(point, field, it) = point + (field - 1) * nPoints + (it - 1) * nPoints * NField
+    col_force(point, field, it) = point + (field - 1) * nPoints + (it - 1) * nPoints * NField
+
+    rowsA = Int[]; colsA = Int[]; valsA = Float64[]
+    rowsL = Int[]; colsL = Int[]; valsL = Float64[]
+    rowsR = Int[]; colsR = Int[]; valsR = Float64[]
+    addL(row, point, field, it, val) = (push!(rowsL, row); push!(colsL, col_known(point, field, it)); push!(valsL, val))
+    addR(row, point, field, it, val) = (push!(rowsR, row); push!(colsR, col_force(point, field, it)); push!(valsR, val))
+
+    for I in CartesianIndices(spaceShape)
+        p = LI[I]
+        i, j = Tuple(I)
+        for fld in 1:NField
+            r = rowidx(fld, p)
+            push!(rowsA, r); push!(colsA, r); push!(valsA, 1.0)
+            addL(r, p, fld, 1, 1.0)
+            addL(r, p, fld, 2, -2.0)
+            rscale = source_scale == :dt2 ? dt^2 / ρ : Float64(source_scale)
+            addR(r, p, fld, 2, rscale)
+        end
+
+        ux_row = rowidx(1, p)
+        uz_row = rowidx(2, p)
+        for (di, coeff) in ((-1, 1/dx^2), (0, -2/dx^2), (1, 1/dx^2))
+            ii = i + di
+            1 <= ii <= spaceShape[1] || continue
+            q = LI[CartesianIndex(ii, j)]
+            addL(ux_row, q, 1, 2, -ax * (λ + 2μ) * coeff)
+            addL(uz_row, q, 2, 2, -ax * μ * coeff)
+        end
+        for (dj, coeff) in ((-1, 1/dz^2), (0, -2/dz^2), (1, 1/dz^2))
+            jj = j + dj
+            1 <= jj <= spaceShape[2] || continue
+            q = LI[CartesianIndex(i, jj)]
+            addL(ux_row, q, 1, 2, -ax * μ * coeff)
+            addL(uz_row, q, 2, 2, -ax * (λ + 2μ) * coeff)
+        end
+        for di in (-1, 1), dj in (-1, 1)
+            ii = i + di; jj = j + dj
+            1 <= ii <= spaceShape[1] && 1 <= jj <= spaceShape[2] || continue
+            q = LI[CartesianIndex(ii, jj)]
+            coeff = di * dj / (4dx * dz)
+            addL(ux_row, q, 2, 2, -ax * (λ + μ) * coeff)
+            addL(uz_row, q, 1, 2, -ax * (λ + μ) * coeff)
+        end
+    end
+
+    nRows = nPoints * NField
+    A_unknown = sparse(rowsA, colsA, valsA, nRows, nRows)
+    L_known = sparse(rowsL, colsL, valsL, nRows, nRows * 2)
+    R_force = sparse(rowsR, colsR, valsR, nRows, nRows * 3)
+    b_template = zeros(Float64, nRows)
+    known_lhs_template = zeros(Float64, nPoints, NField, 2)
+    known_rhs_template = zeros(Float64, nPoints, NField, 3)
+
+    function b_fun!(b, knownInputs)
+        nKnownField = length(known_lhs_template)
+        knownFieldVec = @view knownInputs[1:nKnownField]
+        knownForceVec = @view knownInputs[nKnownField+1:nKnownField+length(known_rhs_template)]
+        b .= 0.0
+        mul!(b, L_known, knownFieldVec, -1.0, 1.0)
+        mul!(b, R_force, knownForceVec, 1.0, 1.0)
+        return b
+    end
+
+    function A_fun!(avec, knownInputs)
+        avec .= vec(A_unknown)
+        return avec
+    end
+
+    return (
+        is_numerical=true,
+        is_fd2d_elastic_homogeneous=true,
+        A_unknown=A_unknown,
+        L_known=L_known,
+        R_force=R_force,
+        A_fun! = A_fun!,
+        b_fun! = b_fun!,
+        A_template=copy(A_unknown),
+        b_template=b_template,
+        known_lhs_template=known_lhs_template,
+        known_rhs_template=known_rhs_template,
+        spaceShape=spaceShape,
+        NpointsSpace=nPoints,
+        NforcePoints=nPoints,
+        NField=NField,
+        NForceField=NField,
+        timePointsUsedForOneStep=3,
+    )
+end
+
+function frame_difference_report(frames_a, frames_b)
+    n = min(length(frames_a), length(frames_b))
+    rows = NamedTuple[]
+    for k in 1:n
+        A = frames_a[k]
+        B = frames_b[k]
+        d = A .- B
+        push!(rows, (
+            frame=k,
+            max_a=maximum(abs, A),
+            max_b=maximum(abs, B),
+            maxdiff=maximum(abs, d),
+            reldiff=maximum(abs, d) / max(maximum(abs, A), maximum(abs, B), eps(Float64)),
+        ))
+    end
+    return rows
+end
+
+function timed_propagation(preparedLin, Nt; kwargs...)
+    elapsed = @elapsed frames = propagate_linear_frames_with_source(preparedLin, Nt; kwargs...)
+    return (; elapsed, frames, report=wavefield_snapshot_report(component_frames(frames, 1)))
+end
+
 function source_time_samples(Nt, dt, timePointsUsedForOneStep; wavelet=nothing, t0=12dt, f0=0.04)
     ntime = Nt + timePointsUsedForOneStep - 1
     t = (0:ntime-1) .* Float64(dt)
@@ -682,6 +896,71 @@ function build_opt_prepared(famousEquationType, models, delta; pointsInSpace=3, 
     numOps = numOpt["numOperators"]
     prepared = Main.flexOPT.prepareLinearSystem(numOps)
     return (; optRec, numOps, prepared, modelFam)
+end
+
+
+function source_rhs_diagnostics(preparedLin, sourceFull; it=1, initialPast=nothing, initialPresent=nothing)
+    NField = preparedLin.NField
+    NpointsSpace = preparedLin.NpointsSpace
+    NForceField = preparedLin.NForceField
+    timePointsUsedForOneStep = preparedLin.timePointsUsedForOneStep
+    NknownTime = max(timePointsUsedForOneStep - 1, 0)
+
+    zeroFrame = zeros(Float64, preparedLin.spaceShape..., NField)
+    initialPast = initialPast === nothing ? zeroFrame : Float64.(initialPast)
+    initialPresent = initialPresent === nothing ? zeroFrame : Float64.(initialPresent)
+
+    size(sourceFull, 1) == preparedLin.NforcePoints || error("sourceFull first dimension should be NforcePoints=$(preparedLin.NforcePoints)")
+    size(sourceFull, 2) == NForceField || error("sourceFull second dimension should be NForceField=$NForceField")
+    size(sourceFull, 3) >= it + timePointsUsedForOneStep - 1 || error("sourceFull has too few time samples for it=$it")
+
+    knownField = zeros(Float64, size(preparedLin.known_lhs_template))
+    if NknownTime >= 1
+        knownField[:, :, 1] .= reshape(initialPast, NpointsSpace, NField)
+    end
+    if NknownTime >= 2
+        knownField[:, :, 2] .= reshape(initialPresent, NpointsSpace, NField)
+    end
+    knownForce = zero(preparedLin.known_rhs_template)
+    knownForce .= sourceFull[:, :, it:it+timePointsUsedForOneStep-1]
+
+    b = copy(preparedLin.b_template)
+    preparedLin.b_fun!(b, vcat(vec(knownField), vec(knownForce)))
+    bmat = reshape(real.(b), preparedLin.spaceShape..., NField)
+    return (
+        it=it,
+        force_max=maximum(abs, knownForce),
+        force_sum=sum(knownForce),
+        force_nonzero=count(!iszero, knownForce),
+        b_norm=norm(b),
+        b_max=maximum(abs, b),
+        b_sum=sum(b),
+        b_nonzero=count(!iszero, b),
+        b_argmax=CartesianIndex(Tuple(argmax(abs.(bmat)))[1:ndims(bmat)-1]),
+        b_frame=bmat,
+    )
+end
+
+function source_rhs_scan(preparedLin, sourceFull; its=1:min(10, size(sourceFull, 3) - preparedLin.timePointsUsedForOneStep + 1))
+    rows = NamedTuple[]
+    for it in its
+        d = source_rhs_diagnostics(preparedLin, sourceFull; it=it)
+        push!(rows, (
+            it=it,
+            force_max=d.force_max,
+            force_nonzero=d.force_nonzero,
+            b_norm=d.b_norm,
+            b_max=d.b_max,
+            b_sum=d.b_sum,
+            b_nonzero=d.b_nonzero,
+            b_argmax=d.b_argmax,
+        ))
+    end
+    return rows
+end
+
+function rhs_stencil_at_source(numOps, point::CartesianIndex; iExpr=1, iForceField=1, atol=0.0)
+    return operator_stencil_at_point(numOps, point; which=:right, iExpr=iExpr, iField=iForceField, atol=atol)
 end
 
 function elastic_lame_from_rho_vp_vs(rho, vp, vs; rho_scale=1000.0, velocity_scale=1000.0)

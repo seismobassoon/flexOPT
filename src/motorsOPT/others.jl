@@ -1,5 +1,7 @@
 
 timeDimensionString="t" 
+
+_as_variable_tuple(vars) = vars === nothing ? () : vars
 # if the user does not want to use "t" for the time marching scheme, it should be changed
 # and this "t" should be the last element in coordinates
 
@@ -46,6 +48,7 @@ end
 
 function varMmaker(maxPointsUsed,coordinates,vars,∂) 
     # this will make an array of material coeffs for with a local Cartesian grid (max points used for a node)
+    vars = _as_variable_tuple(vars)
     Ndimension = length(coordinates)
 
     R = CartesianIndices(Tuple(maxPointsUsed))
@@ -289,6 +292,8 @@ function numbersOfTheExpression(equationCharacteristics,
             offsetμInΔyInSpace, offsetμInΔyInTime = TaylorOptions
 
     timeMarching = any(a -> a === timeDimensionString, string.(coordinates))
+
+    vars = _as_variable_tuple(vars)
 
     NtypeofExpr = length(exprs)
     NtypeofMaterialVariables = length(vars)
