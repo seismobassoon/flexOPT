@@ -3,6 +3,20 @@ using Symbolics
 # this source file was truly a fruit of some weeks of optimisations with codex (chatGPT) March-April 2026
 # Nobuaki Fuji, IPGP/UPC/IUF
 
+# Public API still uses integer orders: -1, 0, 1, 2, ...
+# Internally we immediately map that to a semantic mode so that -1 never
+# becomes an accidental array slot through order + 1 arithmetic.
+function bspline_order_spec(order::Integer)
+    order < -1 && throw(ArgumentError("B-spline order must be -1 for :indicator or >= 0 for :bspline; got $order"))
+    return (kind = order == -1 ? :indicator : :bspline, order = Int(order))
+end
+
+bspline_order_spec(params) = bspline_order_spec(params.maximumOrder)
+bspline_order_slot(spec::NamedTuple) = spec.kind == :bspline ? spec.order + 1 :
+    throw(ArgumentError(":indicator has no B-spline storage slot"))
+is_indicator_family(family) = family !== nothing && hasproperty(family, :kind) && family.kind == :indicator
+is_bspline_family(family) = family !== nothing && hasproperty(family, :kind) && family.kind == :bspline
+
 """
     constructBsplineFamily(params; simplify_expr=Symbolics.simplify, boundary_mode=:clamped)
 
@@ -24,7 +38,8 @@ degree `p`.
 """
 function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:ghost,correction_truncation=true,)
     
-    maximumOrder = params.maximumOrder
+    orderSpec = bspline_order_spec(params)
+    maximumOrder = orderSpec.order
     allNodes = collect(params.allNodes)
     idx_nodesNum = collect(params.idx_nodesNum)
     idx_refPoints_original = collect(params.idx_refPoints)
@@ -44,41 +59,14 @@ function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:g
     numberFunctionsOriginal = length(idx_refPoints_original)
 
 
-
-    # # Special case: only p = -1 indicator family.
-    # if maximumOrder == -1
-    #     b_full = CompactSymbolicFunctions(
-    #         allNodes,
-    #         numberFunctionsOriginal;
-    #         auxDims=(1,),
-    #         variables=variables,
-    #     )
-    #     b_support = CompactSymbolicFunctions(
-    #         segmentNodes,
-    #         numberFunctionsOriginal;
-    #         auxDims=(1,),
-    #         variables=variables,
-    #     )
-
-    #     b_full.data[rangeSegments, :, 1] .= 1
-    #     b_support.data[:, :, 1] .= 1
-
-    #     b = CompactSymbolicFunctions(
-    #         segmentNodes,
-    #         length(selected_positions);
-    #         auxDims=(1,),
-    #         variables=variables,
-    #         init=b_support.data[:, selected_positions, :],
-    #     )
-
-    #     return (
-    #         b = b,
-    #         b_full = b_full,
-    #         b_support = b_support,
-    #     )
-    # end
-    if maximumOrder == -1
-        return nothing
+    if orderSpec.kind == :indicator
+        return (
+            kind = :indicator,
+            order = -1,
+            b = nothing,
+            b_full = nothing,
+            b_support = nothing,
+        )
     end
 
     NorderShiftedByOne = maximumOrder + 1
@@ -229,6 +217,8 @@ function constructBsplineFamily(params;simplify_expr=mySimplify,boundary_mode=:g
     )
 
     return (
+        kind = :bspline,
+        order = maximumOrder,
         b = b,
         b_full = b_full,
         b_support = b_support,

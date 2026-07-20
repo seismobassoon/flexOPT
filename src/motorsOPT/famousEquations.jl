@@ -274,7 +274,7 @@ function famousEquation(::Val{:eq_2DsismoTimeIsoHetero})
     extexprs = derivMoment[1], derivMoment[2]
     extfields = M[1,1], M[1,2], M[2,1], M[2,2]
     extvars = nothing
-    coordinates =(x,y)
+    coordinates =(x,y,t)
     ∂, ∂² = usefulPartials(coordinates)
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
 end

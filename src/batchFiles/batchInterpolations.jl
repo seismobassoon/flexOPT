@@ -9,8 +9,8 @@ giveMaskPX(Xs,Ys)=giveMaskPX(Xs,Ys,nothing)
 
 function giveMaskPX(Xs,Ys,Zs)
 
-    minX, maxX, nX = @unpack Xs
-    minY, maxY, nY = @unpack Ys
+    @unpack minX, maxX, nX = Xs
+    @unpack minY, maxY, nY = Ys
 
     if Zs === nothing
 
@@ -18,7 +18,7 @@ function giveMaskPX(Xs,Ys,Zs)
         return (mask=mask,Ps=(pm,pn),XIs=(xi,yi))
                                             
     else
-        minZ, maxZ, nZ = @unpack Zs
+        @unpack minZ, maxZ, nZ = Zs
         mask,(pm,pn,po),(xi,yi,zi) = DIVAnd_rectdom(range(minX,stop=maxX,length=nX),range(minY,stop=maxY,length=nY),range(minZ,stop=maxZ,length=nZ))
         return (mask=mask,Ps=(pm,pn,po),XIs=(xi,yi,zi))
     end
@@ -26,7 +26,7 @@ end
 
 interpolateField(Xs,Ys,Xnode,Ynode;correlationLength=correlationLengthDefault,epsilon2=epsilon2Default) = interpolateField(Xs,Ys,nothing,Xnode,Ynode,nothing;correlationLength=correlationLength,epsilon2=epsilon2)
 
-function interpolateField(Xs,Ys,Zs,XXnodes;correlationLength=correlationLengthDefault,epsilon2=epsilon2Default) 
+function interpolateField(Xs,Ys,Zs,Xnode,Ynode,Znode;correlationLength=correlationLengthDefault,epsilon2=epsilon2Default) 
     masks = giveMaskPX(Xs,Ys,Zs)
     if Znode === nothing
         XXnodes = (Xnode,Ynode)

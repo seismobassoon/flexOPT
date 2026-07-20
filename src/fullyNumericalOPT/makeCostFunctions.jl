@@ -1,5 +1,9 @@
 using SparseArrays
 
+function CerjanBoundaryCondition(distance2; damping=0.0053)
+    return exp(-damping * Float64(distance2))
+end
+
 struct CouplingTable{T}
     rows::Vector{Int32}
     cols::Vector{Int32}
@@ -254,7 +258,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     @unpack νWhole, νGeometry, νRelative, localPointsIndices,
         ModelPoints, Models, maskingField, conv,
         timePointsUsedForOneStep, activeTimePoints, wholeMin, wholeMax,
-        modelMin, wholeRegionPointsSpace = numericalGeometry
+        modelMin, modelDomainMax, wholeRegionPointsSpace = numericalGeometry
 
     @unpack lhs, rhs, numbersOfTheSystem, fieldNames = optRec["recette"]
     @unpack fields, extfields = fieldNames
@@ -334,7 +338,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
                         jPointModel = conv.whole2model(jPoint)
                         jPointInModel =
                             is_all_less_than_or_equal(modelMin, jPointModel) &&
-                            is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+                            is_all_less_than_or_equal(jPointModel, modelDomainMax)
 
                         if jPointInModel || iT == iTimeMax
                             boundaryWeight = 1.0
@@ -342,7 +346,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
                             distance2 = distance2_point_to_box(
                                 jPointModel,
                                 modelMin,
-                                vec2car(ModelPoints[1:end-1, 1]),
+                                modelDomainMax,
                             )
                             boundaryWeight = CerjanBoundaryCondition(distance2)
                         end
@@ -396,7 +400,7 @@ function numericalOperaotrConstruction_slow_due_to_substitute_iteration(optRec,m
     @unpack νWhole, νGeometry, νRelative, localPointsIndices,
         ModelPoints, Models, maskingField, conv,
         timePointsUsedForOneStep, activeTimePoints, wholeMin, wholeMax,
-        modelMin, wholeRegionPointsSpace = numericalGeometry
+        modelMin, modelDomainMax, wholeRegionPointsSpace = numericalGeometry
 
     @unpack lhs, rhs, numbersOfTheSystem, fieldNames = optRec["recette"]
     @unpack fields, extfields = fieldNames
@@ -475,7 +479,7 @@ function numericalOperaotrConstruction_slow_due_to_substitute_iteration(optRec,m
                         jPointModel = conv.whole2model(jPoint)
                         jPointInModel =
                             is_all_less_than_or_equal(modelMin, jPointModel) &&
-                            is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+                            is_all_less_than_or_equal(jPointModel, modelDomainMax)
 
                         if jPointInModel || iT == iTimeMax
                             boundaryWeight = 1.0
@@ -483,7 +487,7 @@ function numericalOperaotrConstruction_slow_due_to_substitute_iteration(optRec,m
                             distance2 = distance2_point_to_box(
                                 jPointModel,
                                 modelMin,
-                                vec2car(ModelPoints[1:end-1, 1]),
+                                modelDomainMax,
                             )
                             boundaryWeight = CerjanBoundaryCondition(distance2)
                         end
@@ -567,7 +571,7 @@ function numericalOperatorConstruction_too_heavy(optRec,modelFam,side;absorbingB
 
     @unpack νWhole, νGeometry, νRelative, localPointsIndices, middlepoints,
         ModelPoints, Models, maskingField, conv,
-        timePointsUsedForOneStep, wholeMin, wholeMax, modelMin,
+        timePointsUsedForOneStep, wholeMin, wholeMax, modelMin, modelDomainMax,
         wholeRegionPoints, wholeRegionPointsSpace = numericalGeometry
 
     @unpack models, modelName, modelPoints = modelFam
@@ -677,7 +681,7 @@ function numericalOperatorConstruction_too_heavy(optRec,modelFam,side;absorbingB
 
                     for iField in 1:NtypeofFields
                         if is_all_less_than_or_equal(modelMin, jPointModel) &&
-                        is_all_less_than_or_equal(jPointModel, vec2car(ModelPoints[1:end-1, 1]))
+                        is_all_less_than_or_equal(jPointModel, modelDomainMax)
 
                             #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
                             #    場[iField, iT][jPoint] * maskingField[jPoint]
@@ -697,7 +701,7 @@ function numericalOperatorConstruction_too_heavy(optRec,modelFam,side;absorbingB
                                 distance2 = distance2_point_to_box(
                                     jPointModel,
                                     modelMin,
-                                    vec2car(ModelPoints[1:end-1, 1]),
+                                    modelDomainMax,
                                 )
                                 #tmpMapping[Ulocal[linearjPointTLocal, iField]] =
                                 #    場[iField, iT][jPoint] *
@@ -899,6 +903,7 @@ function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBounda
     wholeMin = νWhole[1]
     wholeMax = νWhole[end]
     modelMin = CartesianIndex(ones(Int, newD-1)...)
+    modelDomainMax = vec2car(collect(modelPoints[1:end-1]))
 
 
 
@@ -984,6 +989,7 @@ function prepareNumericalOperatorGeometry(optRec, modelFam,side; absorbingBounda
     wholeMin = wholeMin,
     wholeMax = wholeMax,
     modelMin = modelMin,
+    modelDomainMax = modelDomainMax,
     )
 end
 

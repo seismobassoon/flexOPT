@@ -318,9 +318,9 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
                     xᶜLinear = LI_points[svec2car(xᶜ)]
                     U_HERE = Ulocal[xᶜLinear,iField]                    
                     substitutedValue = substitute(nodeValue, localmapηᶜ)
-                    # newCoef is produced by windowContraction! with axes (xᶜ, x, α, geometry).
-                    # Keep this order here; swapping x and xᶜ creates an artificial directional bias.
-                    Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] += newCoef[xᶜLinear,xLinear,indexLinearα,iConfigGeometry] * substitutedValue
+                    # Equation (54): x is the material point (µ′+η′) and xᶜ is the final field column ν′.
+                    # windowContraction! stores axes as (material point, field point, α, geometry).
+                    Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] += newCoef[xLinear,xᶜLinear,indexLinearα,iConfigGeometry] * substitutedValue
                     #AjiννᶜU[iExpr,iConfigGeometry]+= Ajiννᶜ[xᶜLinear,iField,iExpr,iConfigGeometry] * U_HERE
                 end
 

@@ -135,25 +135,30 @@ function WYYKKIntegralPureSymbolic(params::Dict)
     referenceCSF = Kμ.k
     WYYKK=CompactSymbolicFunctions(referenceCSF.nodes,1;auxDims=(l_n_max+1, lᶜ_nᶜ_max+1, length(μs),length(μᶜs),length(ν)),variables=referenceCSF.variables)
 
-    # For maximumOrder == -1, constructBsplineFamily returns nothing.
-    # This means an indicator/box support in this integral; numerically the
-    # multiplicative B-spline factor is one on the compact support represented
-    # by the Taylor kernel segments.
-    bspline_factor(family, iFunction, derivSlot, orderSlot) =
-        family === nothing ? 1 : family.b.data[:, iFunction, derivSlot, orderSlot]
+    orderSpecν = bspline_order_spec(orderBspline1D)
+    orderSpecμᶜ = bspline_order_spec(YorderBspline1Dμᶜ)
+    orderSpecμ = bspline_order_spec(YorderBspline1Dμ)
 
-    YorderSlotμᶜ = maximum((YorderBspline1Dμᶜ + 1,1)) # for Yorder = -1 : just boxcar
-    YorderSlotμ = maximum((YorderBspline1Dμ + 1,1)) # for Yorder = -1 : just boxcar
-    
-    orderSlot = maximum((orderBspline1D + 1,1)) # for order = -1 : just boxcar
+    # The public API still gives integer orders. From here on, the integral uses
+    # semantic modes: :indicator has multiplicative factor 1; :bspline reads the
+    # explicit B-spline slot. This keeps -1 out of array indexing.
+    function bspline_factor(family, iFunction, derivSlot, spec)
+        if spec.kind == :indicator
+            is_indicator_family(family) || error("Expected :indicator family for order $(spec.order)")
+            return 1
+        end
+        is_bspline_family(family) || error("Expected :bspline family for order $(spec.order)")
+        return family.b.data[:, iFunction, derivSlot, bspline_order_slot(spec)]
+    end
+
     derivSlot = 1 # no derivatives
 
     for iν ∈ eachindex(ν), iμᶜ ∈ eachindex(μᶜs), iμ ∈ eachindex(μs), lᶜ_nᶜ ∈ 0:lᶜ_nᶜ_max, l_n ∈ 0:l_n_max
         l_n_slot=l_n+1
         lᶜ_nᶜ_slot = lᶜ_nᶜ+1
-        Wfactor = bspline_factor(Wν, iν, derivSlot, orderSlot)
-        YcFactor = bspline_factor(Yμᶜ, iμᶜ, derivSlot, YorderSlotμᶜ)
-        YFactor = bspline_factor(Yμ, iμ, derivSlot, YorderSlotμ)
+        Wfactor = bspline_factor(Wν, iν, derivSlot, orderSpecν)
+        YcFactor = bspline_factor(Yμᶜ, iμᶜ, derivSlot, orderSpecμᶜ)
+        YFactor = bspline_factor(Yμ, iμ, derivSlot, orderSpecμ)
         WYYKK.data[:,1,l_n_slot, lᶜ_nᶜ_slot, iμ, iμᶜ,iν] = mySimplify(
             Wfactor .*
             YcFactor .*
@@ -191,29 +196,29 @@ function WYYKKIntegralPureSymbolic(params::Dict)
 
 
         # Page 1: B-spline families
-        save_bspline_report_plot(
+        save_optional_bspline_report_plot(
             joinpath(reportDir, "01_Wnu.pdf"),
-            Wν.b;
+            Wν;
             derivOrder=0,
-            order=max(orderBspline1D, 0),
+            order=orderBspline1D,
             N=80,
             title="Wν",
         )
 
-        save_bspline_report_plot(
+        save_optional_bspline_report_plot(
             joinpath(reportDir, "02_Ymuc.pdf"),
-            Yμᶜ.b;
+            Yμᶜ;
             derivOrder=0,
-            order=max(YorderBspline1Dμᶜ, 0),
+            order=YorderBspline1Dμᶜ,
             N=80,
             title="Yμᶜ",
         )
 
-        save_bspline_report_plot(
+        save_optional_bspline_report_plot(
             joinpath(reportDir, "03_Ymu.pdf"),
-            Yμ.b;
+            Yμ;
             derivOrder=0,
-            order=max(YorderBspline1Dμ, 0),
+            order=YorderBspline1Dμ,
             N=80,
             title="Yμ",
         )
@@ -309,5 +314,39 @@ function save_bspline_report_plot(
     slots = (derivOrder + 1, order + 1)
     ylabel = derivOrder == 0 ? "B-spline value" : "Derivative order $derivOrder"
     return save_report_plot(filepath, csf, slots; N=N, Δxval=Δxval, title=title, ylabel=ylabel)
+end
+
+function save_optional_bspline_report_plot(
+    filepath::AbstractString,
+    family;
+    derivOrder=0,
+    order=0,
+    N=80,
+    Δxval=1.0,
+    title="",
+)
+    spec = bspline_order_spec(order)
+    if spec.kind == :indicator
+        is_indicator_family(family) || error("Expected :indicator family for report order $(spec.order)")
+        txtpath = replace(filepath, r"\.pdf$" => ".txt")
+        open(txtpath, "w") do io
+            println(io, title)
+            println(io, "family.kind = :indicator")
+            println(io, "order = ", order)
+            println(io, "This corresponds to the direct/indicator case.")
+        end
+        return txtpath
+    end
+
+    is_bspline_family(family) || error("Expected :bspline family for report order $(spec.order)")
+    return save_bspline_report_plot(
+        filepath,
+        family.b;
+        derivOrder=derivOrder,
+        order=spec.order,
+        N=N,
+        Δxval=Δxval,
+        title=title,
+    )
 end
 

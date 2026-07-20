@@ -338,14 +338,14 @@ function plot_wave_snapshots(frames; indices=nothing, sourcePoint=nothing, clim=
     return fig
 end
 
-function build_toy_opt_prepared(; velocity_value=2600.0, shape=(201,201), dx=100.0, cfl=0.45,
+function build_toy_opt_prepared(; velocity_value=2600.0, shape=(201,201), dx=100.0, cfl=0.45, dt=nothing,
     famousEquationType="2DacousticTime", pointsInSpace=3, pointsInTime=3, supplementaryOrder=2,
-    orderBspace=1, orderBtime=1, recipe_backend=CPU())
+    orderBspace=1, orderBtime=1, YorderBspace=-1, YorderBtime=-1, recipe_backend=CPU())
     velocity = fill(Float64(velocity_value), shape)
-    dt = cfl * dx / velocity_value
-    delta = (dx, dx, dt)
-    fieldItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=0, YorderBtime=0)
-    materItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=0, YorderBtime=0)
+    dt_value = dt === nothing ? cfl * dx / velocity_value : Float64(dt)
+    delta = (dx, dx, dt_value)
+    fieldItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
+    materItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
     params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
     old_backend = Main.flexOPT.backend
     if recipe_backend !== nothing
@@ -358,7 +358,8 @@ function build_toy_opt_prepared(; velocity_value=2600.0, shape=(201,201), dx=100
     end
     recette = optRec["recette"]
     modelPoints = Main.flexOPT.getModelPoints(velocity, pointsInTime, recette.numbersOfTheSystem.numbersOfTheSystemL.timeMarching)
-    modelFam = (models=[velocity], modelPoints=modelPoints, Δ=delta, modelName="toy_OPT_gaussian_drift")
+    material_model = occursin("Homo", famousEquationType) ? Float64(velocity_value) : velocity
+    modelFam = (models=[material_model], modelPoints=modelPoints, Δ=delta, modelName="toy_OPT_gaussian_drift")
     numParams = @strdict optRec=optRec modelFam=modelFam absorbingBoundaries=nothing maskedRegionInSpace=nothing representation="matrixfree"
     numOpt = Main.flexOPT.numericalOperatorConstruction(numParams)
     numOps = numOpt["numOperators"]
@@ -454,4 +455,249 @@ function stencil_time_summary(stencil_rows)
         ))
     end
     return out
+end
+
+
+function stencil_matrices_by_time(stencil_rows; radius=1)
+    slots = sort(unique(r.time_slot for r in stencil_rows))
+    mats = NamedTuple[]
+    for iT in slots
+        rs = filter(r -> r.time_slot == iT, stencil_rows)
+        M = zeros(Float64, 2radius + 1, 2radius + 1)
+        for r in rs
+            ox, oy = r.offset
+            if -radius <= ox <= radius && -radius <= oy <= radius
+                M[ox + radius + 1, oy + radius + 1] = Float64(real(r.coef))
+            end
+        end
+        push!(mats, (time_slot=iT, time_role=rs[1].time_role, matrix=M))
+    end
+    return mats
+end
+
+function fd2d_acoustic_reference_stencil(v, dx, dt)
+    cx = (v / dx)^2
+    ct = 1 / dt^2
+    mats = [zeros(Float64, 3, 3) for _ in 1:3]
+    # residual: u_tt - v^2(u_xx + u_yy)
+    mats[1][2,2] = ct
+    mats[2][2,2] = -2ct + 4cx
+    mats[2][1,2] = -cx
+    mats[2][3,2] = -cx
+    mats[2][2,1] = -cx
+    mats[2][2,3] = -cx
+    mats[3][2,2] = ct
+    return [
+        (time_slot=1, time_role=:past_2, matrix=mats[1]),
+        (time_slot=2, time_role=:present, matrix=mats[2]),
+        (time_slot=3, time_role=:future, matrix=mats[3]),
+    ]
+end
+
+function compare_stencil_scale_to_fd(stencil_rows, v, dx, dt; radius=1)
+    opt = stencil_matrices_by_time(stencil_rows; radius=radius)
+    fd = fd2d_acoustic_reference_stencil(v, dx, dt)
+    rows = NamedTuple[]
+    for (o, f) in zip(opt, fd)
+        optmax = maximum(abs, o.matrix)
+        fdmax = maximum(abs, f.matrix)
+        push!(rows, (
+            time_slot=o.time_slot,
+            time_role=o.time_role,
+            opt_maxabs=optmax,
+            fd_maxabs=fdmax,
+            opt_over_fd=fdmax == 0 ? NaN : optmax / fdmax,
+            opt_sum=sum(o.matrix),
+            fd_sum=sum(f.matrix),
+        ))
+    end
+    return rows
+end
+
+
+function taylor_C_moment_report(optRec, delta; side=:lhs, geometry=1, mu_index=1)
+    recette = optRec isa AbstractDict ? optRec["recette"] : optRec.recette
+    C = side == :lhs ? recette.Cˡη : recette.CˡηForce
+    nodes = recette.nodes[geometry]
+    center = nodes[recette.centresIndices[geometry]]
+    nEta, nL, nMu = size(C)
+    nDim = length(center)
+    Lside = round(Int, nL^(1 / nDim))
+    prod(fill(Lside, nDim)) == nL || error("cannot infer tensor Taylor order shape from nL=$nL and nDim=$nDim")
+    Linds = CartesianIndices(ntuple(_ -> Lside, nDim))
+
+    A = zeros(Float64, nL, nEta)
+    for (iEta, p) in enumerate(vec(nodes))
+        dist = (Float64.(p .- center)) .* Float64.(delta)
+        for J in Linds
+            linJ = LinearIndices(Linds)[J]
+            orders = Tuple(J) .- 1
+            A[linJ, iEta] = prod(dist .^ orders) / prod(factorial.(orders))
+        end
+    end
+
+    interesting = [ntuple(_ -> 1, nDim)]
+    for d in 1:nDim
+        idx = ntuple(i -> i == d ? 3 : 1, nDim)
+        push!(interesting, idx)
+    end
+
+    rows = NamedTuple[]
+    for idx in interesting
+        lin = LinearIndices(Linds)[CartesianIndex(idx)]
+        weights = C[:, lin, mu_index]
+        moments = A * weights
+        push!(rows, (
+            order=Tuple(idx .- 1),
+            linear_order=lin,
+            weights_maxabs=maximum(abs, weights),
+            target_moment=moments[lin],
+            moments_maxabs=maximum(abs, moments),
+            leakage_maxabs=maximum(abs, [moments[i] for i in eachindex(moments) if i != lin]),
+        ))
+    end
+    return rows
+end
+
+
+function source_time_samples(Nt, dt, timePointsUsedForOneStep; wavelet=nothing, t0=12dt, f0=0.04)
+    ntime = Nt + timePointsUsedForOneStep - 1
+    t = (0:ntime-1) .* Float64(dt)
+    signal = wavelet === nothing ? Main.flexOPT.Ricker.(t, Float64(t0), Float64(f0)) : wavelet.(t)
+    return Float64.(signal)
+end
+
+function make_source_full(preparedLin, weights::AbstractVector, timeSignal::AbstractVector; iForceField=1, amplitude=1.0)
+    length(weights) == preparedLin.NforcePoints || error("weights length should be NforcePoints=$(preparedLin.NforcePoints)")
+    1 <= iForceField <= preparedLin.NForceField || error("iForceField should be between 1 and $(preparedLin.NForceField)")
+    sourceFull = zeros(Float64, preparedLin.NforcePoints, preparedLin.NForceField, length(timeSignal))
+    for it in eachindex(timeSignal)
+        sourceFull[:, iForceField, it] .= amplitude .* weights .* Float64(timeSignal[it])
+    end
+    return sourceFull
+end
+
+function point_source_full(preparedLin, point::CartesianIndex, timeSignal; iForceField=1, amplitude=1.0, normalise=:none)
+    weights = point_source_weights(preparedLin, point; normalise=normalise)
+    return make_source_full(preparedLin, weights, timeSignal; iForceField=iForceField, amplitude=amplitude)
+end
+
+function propagate_linear_frames_with_source(preparedLin, Nt; initialPast=nothing, initialPresent=nothing,
+    sourceFull=nothing, store_every=1, blowup_limit=Inf, diagonal_shift=0.0)
+    NField = preparedLin.NField
+    NpointsSpace = preparedLin.NpointsSpace
+    NForceField = preparedLin.NForceField
+    timePointsUsedForOneStep = preparedLin.timePointsUsedForOneStep
+    NknownTime = max(timePointsUsedForOneStep - 1, 0)
+    NknownTime == 2 || error("source propagation helper expects exactly two known time levels; got $NknownTime")
+
+    zeroFrame = zeros(Float64, preparedLin.spaceShape..., NField)
+    initialPast = initialPast === nothing ? zeroFrame : Float64.(initialPast)
+    initialPresent = initialPresent === nothing ? zeroFrame : Float64.(initialPresent)
+    size(initialPast) == size(zeroFrame) || error("initialPast should have size $(size(zeroFrame))")
+    size(initialPresent) == size(zeroFrame) || error("initialPresent should have size $(size(zeroFrame))")
+
+    if sourceFull === nothing
+        sourceFull = zeros(Float64, preparedLin.NforcePoints, NForceField, Nt + timePointsUsedForOneStep - 1)
+    end
+    size(sourceFull, 1) == preparedLin.NforcePoints || error("sourceFull first dimension should be NforcePoints=$(preparedLin.NforcePoints)")
+    size(sourceFull, 2) == NForceField || error("sourceFull second dimension should be NForceField=$NForceField")
+    size(sourceFull, 3) >= Nt + timePointsUsedForOneStep - 1 || error("sourceFull has too few time samples")
+
+    knownField = zeros(Float64, size(preparedLin.known_lhs_template))
+    knownField[:, :, 1] .= reshape(initialPast, NpointsSpace, NField)
+    knownField[:, :, 2] .= reshape(initialPresent, NpointsSpace, NField)
+    knownForce = zero(preparedLin.known_rhs_template)
+    unknownField = zeros(Float64, NpointsSpace, NField)
+
+    A = sparse(preparedLin.A_template)
+    if diagonal_shift != 0.0
+        A = A + diagonal_shift * I
+    end
+    factor = lu(A)
+    b = copy(preparedLin.b_template)
+
+    frames = Vector{Array{Float64}}()
+    push!(frames, copy(initialPresent))
+    for it in 1:Nt
+        knownForce .= sourceFull[:, :, it:it+timePointsUsedForOneStep-1]
+        knownInputs = vcat(vec(knownField), vec(knownForce))
+        preparedLin.b_fun!(b, knownInputs)
+        u = factor \ b
+        unknownField .= reshape(real.(u), NpointsSpace, NField)
+
+        umax = maximum(abs, unknownField)
+        if !isfinite(umax) || umax > blowup_limit
+            @warn "Stopping because wavefield blew up" it umax blowup_limit
+            push!(frames, reshape(copy(unknownField), preparedLin.spaceShape..., NField))
+            break
+        end
+
+        if it % store_every == 0 || it == Nt
+            push!(frames, reshape(copy(unknownField), preparedLin.spaceShape..., NField))
+        end
+
+        knownField[:, :, 1] .= knownField[:, :, 2]
+        knownField[:, :, 2] .= unknownField
+    end
+    return frames
+end
+
+function component_frames(frames, iField::Integer=1)
+    return [Array(selectdim(frame, ndims(frame), iField)) for frame in frames]
+end
+
+function cfl_diagnostics(model_velocity, delta; cfl_safety=0.45, ppw=10, samples_per_period=20)
+    v = Float64.(vec(model_velocity))
+    v = v[isfinite.(v) .& (v .> 0)]
+    dxmin = minimum(Float64.(delta[1:end-1]))
+    vmax = maximum(v)
+    vmed = median(v)
+    suggested_dt_2D = cfl_safety * dxmin / (sqrt(2) * vmax)
+    suggested_f0 = vmed / (ppw * dxmin)
+    suggested_dt_from_f0 = 1 / (samples_per_period * suggested_f0)
+    return (; vmax, vmed, dxmin, current_dt=Float64(delta[end]), suggested_dt_2D, suggested_f0, suggested_dt_from_f0)
+end
+
+function build_opt_prepared(famousEquationType, models, delta; pointsInSpace=3, pointsInTime=3,
+    supplementaryOrder=2, orderBspace=1, orderBtime=1, YorderBspace=-1, YorderBtime=-1,
+    modelName="OPT_model", recipe_backend=CPU())
+    fieldItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
+    materItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
+    params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
+    old_backend = Main.flexOPT.backend
+    if recipe_backend !== nothing
+        Main.flexOPT.backend = recipe_backend
+    end
+    optRec = try
+        Main.flexOPT.makeOPTsemiSymbolic(params)
+    finally
+        Main.flexOPT.backend = old_backend
+    end
+    recette = optRec["recette"]
+    modelPoints = Main.flexOPT.getModelPoints(models[1], pointsInTime, recette.numbersOfTheSystem.numbersOfTheSystemL.timeMarching)
+    modelFam = (models=models, modelPoints=modelPoints, Δ=delta, modelName=modelName)
+    numParams = @strdict optRec=optRec modelFam=modelFam absorbingBoundaries=nothing maskedRegionInSpace=nothing representation="matrixfree"
+    numOpt = Main.flexOPT.numericalOperatorConstruction(numParams)
+    numOps = numOpt["numOperators"]
+    prepared = Main.flexOPT.prepareLinearSystem(numOps)
+    return (; optRec, numOps, prepared, modelFam)
+end
+
+function elastic_lame_from_rho_vp_vs(rho, vp, vs; rho_scale=1000.0, velocity_scale=1000.0)
+    rho_mks = Float64.(rho) .* rho_scale
+    vp_mks = Float64.(vp) .* velocity_scale
+    vs_mks = Float64.(vs) .* velocity_scale
+    mu = rho_mks .* vs_mks.^2
+    lambda = rho_mks .* vp_mks.^2 .- 2 .* mu
+    return rho_mks, lambda, mu, vp_mks, vs_mks
+end
+
+function downsample_center_crop(A, shape::Tuple{Int,Int}; step=1)
+    B = A[1:step:end, 1:step:end]
+    nx, nz = size(B)
+    sx, sz = shape
+    ix0 = max(1, cld(nx - sx, 2) + 1)
+    iz0 = max(1, cld(nz - sz, 2) + 1)
+    return B[ix0:min(ix0+sx-1, nx), iz0:min(iz0+sz-1, nz)]
 end

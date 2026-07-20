@@ -3,7 +3,7 @@ module commonBatchs
     # batch files
     using Symbolics
     using StaticArrays
-    using interpolations
+    using Interpolations
   
     include("batchFiles/batchDrWatson.jl")
     include("batchFiles/batchImages.jl")
