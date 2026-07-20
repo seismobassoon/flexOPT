@@ -764,6 +764,161 @@ function prepare_fd2d_elastic_homogeneous_baseline(rho, lambda, mu, delta; sourc
     )
 end
 
+
+function fd_second_derivative_weights(order::Integer, h::Real)
+    h = Float64(h)
+    if order == 3
+        return Dict(-1 => 1 / h^2, 0 => -2 / h^2, 1 => 1 / h^2)
+    elseif order == 5
+        return Dict(-2 => -1 / (12h^2), -1 => 4 / (3h^2), 0 => -5 / (2h^2), 1 => 4 / (3h^2), 2 => -1 / (12h^2))
+    else
+        error("supported FD second-derivative orders are 3 and 5; got $order")
+    end
+end
+
+function prepare_fd2d_elastic_pointwise_baseline(rho, lambda, mu, delta; spatial_order=3, source_scale=:dt2)
+    spaceShape = size(rho)
+    size(lambda) == spaceShape || error("lambda should have size $spaceShape")
+    size(mu) == spaceShape || error("mu should have size $spaceShape")
+    length(spaceShape) == 2 || error("elastic FD helper currently expects 2D arrays")
+
+    dx, dz, dt = Float64.(delta)
+    wx = fd_second_derivative_weights(spatial_order, dx)
+    wz = fd_second_derivative_weights(spatial_order, dz)
+    nPoints = prod(spaceShape)
+    NField = 2
+    LI = LinearIndices(spaceShape)
+    rowidx(field, point) = point + (field - 1) * nPoints
+    col_known(point, field, it) = point + (field - 1) * nPoints + (it - 1) * nPoints * NField
+    col_force(point, field, it) = point + (field - 1) * nPoints + (it - 1) * nPoints * NField
+
+    rowsA = Int[]; colsA = Int[]; valsA = Float64[]
+    rowsL = Int[]; colsL = Int[]; valsL = Float64[]
+    rowsR = Int[]; colsR = Int[]; valsR = Float64[]
+    addL(row, point, field, it, val) = (push!(rowsL, row); push!(colsL, col_known(point, field, it)); push!(valsL, val))
+    addR(row, point, field, it, val) = (push!(rowsR, row); push!(colsR, col_force(point, field, it)); push!(valsR, val))
+
+    for I in CartesianIndices(spaceShape)
+        p = LI[I]
+        i, j = Tuple(I)
+        ρ = Float64(rho[I])
+        λ = Float64(lambda[I])
+        μ = Float64(mu[I])
+        ax = dt^2 / ρ
+
+        for fld in 1:NField
+            r = rowidx(fld, p)
+            push!(rowsA, r); push!(colsA, r); push!(valsA, 1.0)
+            addL(r, p, fld, 1, 1.0)
+            addL(r, p, fld, 2, -2.0)
+            rscale = source_scale == :dt2 ? dt^2 / ρ : Float64(source_scale)
+            addR(r, p, fld, 2, rscale)
+        end
+
+        ux_row = rowidx(1, p)
+        uz_row = rowidx(2, p)
+        for (di, coeff) in wx
+            ii = i + di
+            1 <= ii <= spaceShape[1] || continue
+            q = LI[CartesianIndex(ii, j)]
+            addL(ux_row, q, 1, 2, -ax * (λ + 2μ) * coeff)
+            addL(uz_row, q, 2, 2, -ax * μ * coeff)
+        end
+        for (dj, coeff) in wz
+            jj = j + dj
+            1 <= jj <= spaceShape[2] || continue
+            q = LI[CartesianIndex(i, jj)]
+            addL(ux_row, q, 1, 2, -ax * μ * coeff)
+            addL(uz_row, q, 2, 2, -ax * (λ + 2μ) * coeff)
+        end
+        for di in (-1, 1), dj in (-1, 1)
+            ii = i + di; jj = j + dj
+            1 <= ii <= spaceShape[1] && 1 <= jj <= spaceShape[2] || continue
+            q = LI[CartesianIndex(ii, jj)]
+            coeff = di * dj / (4dx * dz)
+            addL(ux_row, q, 2, 2, -ax * (λ + μ) * coeff)
+            addL(uz_row, q, 1, 2, -ax * (λ + μ) * coeff)
+        end
+    end
+
+    nRows = nPoints * NField
+    A_unknown = sparse(rowsA, colsA, valsA, nRows, nRows)
+    L_known = sparse(rowsL, colsL, valsL, nRows, nRows * 2)
+    R_force = sparse(rowsR, colsR, valsR, nRows, nRows * 3)
+    b_template = zeros(Float64, nRows)
+    known_lhs_template = zeros(Float64, nPoints, NField, 2)
+    known_rhs_template = zeros(Float64, nPoints, NField, 3)
+
+    function b_fun!(b, knownInputs)
+        nKnownField = length(known_lhs_template)
+        knownFieldVec = @view knownInputs[1:nKnownField]
+        knownForceVec = @view knownInputs[nKnownField+1:nKnownField+length(known_rhs_template)]
+        b .= 0.0
+        mul!(b, L_known, knownFieldVec, -1.0, 1.0)
+        mul!(b, R_force, knownForceVec, 1.0, 1.0)
+        return b
+    end
+
+    function A_fun!(avec, knownInputs)
+        avec .= vec(A_unknown)
+        return avec
+    end
+
+    return (
+        is_numerical=true,
+        is_fd2d_elastic_pointwise=true,
+        spatial_order=spatial_order,
+        A_unknown=A_unknown,
+        L_known=L_known,
+        R_force=R_force,
+        A_fun! = A_fun!,
+        b_fun! = b_fun!,
+        A_template=copy(A_unknown),
+        b_template=b_template,
+        known_lhs_template=known_lhs_template,
+        known_rhs_template=known_rhs_template,
+        spaceShape=spaceShape,
+        NpointsSpace=nPoints,
+        NforcePoints=nPoints,
+        NField=NField,
+        NForceField=NField,
+        timePointsUsedForOneStep=3,
+    )
+end
+
+function downsample_frame_by(frame, factor::Integer)
+    factor == 1 && return copy(frame)
+    inds = ntuple(d -> 1:factor:size(frame, d), ndims(frame))
+    return Array(frame[inds...])
+end
+
+function downsample_frames_by(frames, factor::Integer)
+    return [downsample_frame_by(frame, factor) for frame in frames]
+end
+
+function benchmark_report_against_reference(candidate_frames, reference_frames; label=:candidate)
+    n = min(length(candidate_frames), length(reference_frames))
+    rows = NamedTuple[]
+    for i in 1:n
+        A = candidate_frames[i]
+        R = reference_frames[i]
+        size(A) == size(R) || error("frame size mismatch for $label at frame $i: $(size(A)) vs $(size(R))")
+        d = A .- R
+        refmax = maximum(abs, R)
+        candmax = maximum(abs, A)
+        push!(rows, (
+            label=label,
+            frame=i,
+            refmax=refmax,
+            candmax=candmax,
+            maxdiff=maximum(abs, d),
+            relmaxdiff=maximum(abs, d) / max(refmax, eps(Float64)),
+            l2diff=norm(vec(d)) / max(norm(vec(R)), eps(Float64)),
+        ))
+    end
+    return rows
+end
+
 function frame_difference_report(frames_a, frames_b)
     n = min(length(frames_a), length(frames_b))
     rows = NamedTuple[]
@@ -819,10 +974,19 @@ function propagate_linear_frames_with_source(preparedLin, Nt; initialPast=nothin
     NknownTime == 2 || error("source propagation helper expects exactly two known time levels; got $NknownTime")
 
     zeroFrame = zeros(Float64, preparedLin.spaceShape..., NField)
-    initialPast = initialPast === nothing ? zeroFrame : Float64.(initialPast)
-    initialPresent = initialPresent === nothing ? zeroFrame : Float64.(initialPresent)
-    size(initialPast) == size(zeroFrame) || error("initialPast should have size $(size(zeroFrame))")
-    size(initialPresent) == size(zeroFrame) || error("initialPresent should have size $(size(zeroFrame))")
+    normalise_initial_frame(frame, name) = begin
+        frame === nothing && return copy(zeroFrame)
+        arr = Float64.(frame)
+        if NField == 1 && size(arr) == preparedLin.spaceShape
+            arr3 = zeros(Float64, preparedLin.spaceShape..., 1)
+            arr3[:, :, 1] .= arr
+            return arr3
+        end
+        size(arr) == size(zeroFrame) || error("$name should have size $(size(zeroFrame)); got $(size(arr))")
+        return arr
+    end
+    initialPast = normalise_initial_frame(initialPast, "initialPast")
+    initialPresent = normalise_initial_frame(initialPresent, "initialPresent")
 
     if sourceFull === nothing
         sourceFull = zeros(Float64, preparedLin.NforcePoints, NForceField, Nt + timePointsUsedForOneStep - 1)
@@ -974,6 +1138,243 @@ end
 
 function rhs_stencil_at_source(numOps, point::CartesianIndex; iExpr=1, iForceField=1, atol=0.0)
     return operator_stencil_at_point(numOps, point; which=:right, iExpr=iExpr, iField=iForceField, atol=atol)
+end
+
+
+
+
+function _recipe_get(optRec)
+    return optRec isa AbstractDict ? optRec["recette"] : optRec.recette
+end
+
+function recipe_lhs_symbolic_matrices(optRec; iExpr=1, iField=1, geometry=1)
+    recette = _recipe_get(optRec)
+    A = recette.lhs.Ajiννᶜ
+    audit = recipe_local_index_audit(optRec; geometry=geometry)
+    mats = Dict{Symbol,Matrix{Any}}()
+    for row in audit
+        role = row.time_role
+        if !haskey(mats, role)
+            mats[role] = fill(0, 3, 3)
+        end
+        ox, oy = row.spatial_offset
+        mats[role][ox + 2, oy + 2] = A[row.linear, iField, iExpr, geometry]
+    end
+    return mats
+end
+
+function recipe_material_substitution(varM, material_values)
+    subs = Dict{Any,Any}()
+    for iVar in 1:size(varM, 1)
+        vals = material_values[iVar]
+        for j in 1:size(varM, 2)
+            value = vals isa Number ? vals : vals[j]
+            subs[varM[iVar, j]] = value
+        end
+    end
+    return subs
+end
+
+function recipe_lhs_evaluated_matrices(optRec, material_values; iExpr=1, iField=1, geometry=1)
+    recette = _recipe_get(optRec)
+    mats = recipe_lhs_symbolic_matrices(optRec; iExpr=iExpr, iField=iField, geometry=geometry)
+    subs = recipe_material_substitution(recette.lhs.varM, material_values)
+    out = Dict{Symbol,Matrix{Float64}}()
+    for (role, M) in mats
+        E = similar(M, Float64)
+        for I in CartesianIndices(M)
+            E[I] = Float64(Symbolics.value(Symbolics.substitute(M[I], subs)))
+        end
+        out[role] = E
+    end
+    return out
+end
+
+function recipe_matrix_summary(mats::Dict)
+    roles = sort(collect(keys(mats)); by=string)
+    return [(time_role=role, sumcoef=sum(mats[role]), maxabs=maximum(abs, mats[role]), matrix=mats[role]) for role in roles]
+end
+
+function recipe_lhs_evaluated_summary(optRec, material_values; iExpr=1, iField=1, geometry=1)
+    return recipe_matrix_summary(recipe_lhs_evaluated_matrices(optRec, material_values; iExpr=iExpr, iField=iField, geometry=geometry))
+end
+
+function recipe_variable_report(optRec; side=:left)
+    recette = _recipe_get(optRec)
+    varM = side == :left ? recette.lhs.varM : recette.rhs.varF
+    return [
+        (
+            iVar=iVar,
+            first_symbol=varM[iVar, 1],
+            row_symbols=unique(vec(varM[iVar, :])),
+        )
+        for iVar in 1:size(varM, 1)
+    ]
+end
+
+function local_material_values_from_models(optCase, point::CartesianIndex; geometry=1)
+    numOps = optCase.numOps
+    modelFam = optCase.modelFam
+    op = numOps isa AbstractDict ? numOps["numericalOperators"].left : numOps.numericalOperators.left
+    geom = op.geometry
+    localPointsHere = geom.localPointsIndices[geometry]
+    wholeLinear = LinearIndices(Tuple(geom.wholeRegionPointsSpace))
+    middlepointHere = geom.νRelative[wholeLinear[point]]
+    middlepointSpaceHere = Main.flexOPT.svec2car(Main.flexOPT.carDropDim(middlepointHere))
+    localPointsSpaceHere = Main.flexOPT.carDropDim.(localPointsHere)
+    localPointsSpaceIndicesHere = CartesianIndices(Tuple(localPointsSpaceHere[end]))
+    wholeStencil = localPointsSpaceIndicesHere .+ (point .- middlepointSpaceHere)
+    modelStencil = geom.conv.whole2model.(wholeStencil)
+
+    values = Vector{Vector{Float64}}(undef, length(modelFam.models))
+    activeTimePoints = geom.activeTimePoints
+    for iVar in eachindex(modelFam.models)
+        model = modelFam.models[iVar]
+        deps = geom.ModelPoints[:, iVar]
+        spaceLimits = deps[1:end-1]
+        modelStencilBounced = Main.flexOPT.BouncingCoordinates.(modelStencil, Ref(spaceLimits))
+        vals = Float64[]
+        for iT in 1:activeTimePoints
+            modelTime = deps[end] > 1 ? iT : 1
+            for jPoint in wholeStencil
+                jLocal = jPoint - point + middlepointSpaceHere
+                modelPoint = modelStencilBounced[jLocal]
+                if model isa Number
+                    push!(vals, Float64(model))
+                elseif ndims(model) == length(Tuple(modelPoint))
+                    push!(vals, Float64(model[Tuple(modelPoint)...]))
+                else
+                    push!(vals, Float64(model[Tuple(modelPoint)..., modelTime]))
+                end
+            end
+        end
+        values[iVar] = vals
+    end
+    return values
+end
+
+function compare_recipe_to_assembled_at_point(optCase, point::CartesianIndex; iExpr=1, iField=1, geometry=1)
+    material_values = local_material_values_from_models(optCase, point; geometry=geometry)
+    recipe = recipe_lhs_evaluated_summary(optCase.optRec, material_values; iExpr=iExpr, iField=iField, geometry=geometry)
+    assembled_rows = operator_stencil_at_point(optCase.numOps, point; which=:left, iExpr=iExpr)
+    assembled = stencil_time_matrices(assembled_rows; radius=1)
+    variables = recipe_variable_report(optCase.optRec; side=:left)
+    return (; variables, material_values, recipe, assembled)
+end
+
+function fd3_elastic_reference_stencil(rho, lambda, mu; iExpr=1, iField=1)
+    rho = Float64(rho)
+    lambda = Float64(lambda)
+    mu = Float64(mu)
+    mats = [zeros(Float64, 3, 3) for _ in 1:3]
+
+    if iExpr == iField
+        mats[1][2, 2] = rho
+        mats[3][2, 2] = rho
+        mats[2][2, 2] = -2rho
+        if iExpr == 1
+            cxx = lambda + 2mu
+            czz = mu
+        elseif iExpr == 2
+            cxx = mu
+            czz = lambda + 2mu
+        else
+            error("iExpr should be 1 or 2")
+        end
+        mats[2][2, 2] += 2cxx + 2czz
+        mats[2][1, 2] += -cxx
+        mats[2][3, 2] += -cxx
+        mats[2][2, 1] += -czz
+        mats[2][2, 3] += -czz
+    else
+        # Cross term: -(lambda+mu) * d² u_other / dx dz.
+        c = -(lambda + mu) / 4
+        mats[2][3, 3] += c
+        mats[2][1, 1] += c
+        mats[2][3, 1] += -c
+        mats[2][1, 3] += -c
+    end
+
+    return [
+        (time_slot=1, time_role=:past_2, matrix=mats[1]),
+        (time_slot=2, time_role=:present, matrix=mats[2]),
+        (time_slot=3, time_role=:future, matrix=mats[3]),
+    ]
+end
+
+function compare_stencil_to_reference_matrices(stencil_rows, reference_mats; radius=1)
+    opt = stencil_matrices_by_time(stencil_rows; radius=radius)
+    rows = NamedTuple[]
+    for (o, f) in zip(opt, reference_mats)
+        D = o.matrix .- f.matrix
+        optmax = maximum(abs, o.matrix)
+        refmax = maximum(abs, f.matrix)
+        push!(rows, (
+            time_slot=o.time_slot,
+            time_role=o.time_role,
+            opt_sum=sum(o.matrix),
+            ref_sum=sum(f.matrix),
+            opt_maxabs=optmax,
+            ref_maxabs=refmax,
+            maxdiff=maximum(abs, D),
+            relmaxdiff=maximum(abs, D) / max(refmax, eps(Float64)),
+        ))
+    end
+    return rows
+end
+
+function elastic_lhs_local_diagnostics(numOps, point, rho, lambda, mu; atol=0.0)
+    rows = NamedTuple[]
+    matrices = Dict{Tuple{Int,Int},Any}()
+    comparisons = Dict{Tuple{Int,Int},Any}()
+    stability = Dict{Tuple{Int,Int},Any}()
+    for iExpr in 1:2, iField in 1:2
+        st = operator_stencil_at_point(numOps, point; which=:left, iExpr=iExpr, iField=iField, atol=atol)
+        ref = fd3_elastic_reference_stencil(rho, lambda, mu; iExpr=iExpr, iField=iField)
+        matrices[(iExpr, iField)] = stencil_matrices_by_time(st)
+        comparisons[(iExpr, iField)] = compare_stencil_to_reference_matrices(st, ref)
+        stability[(iExpr, iField)] = local_stability_scan(st)
+        push!(rows, (
+            iExpr=iExpr,
+            iField=iField,
+            summary=stencil_time_summary(st),
+            comparison=comparisons[(iExpr, iField)],
+            worst_stability=stability[(iExpr, iField)][1],
+        ))
+    end
+    return (; rows, matrices, comparisons, stability)
+end
+
+function local_time_symbol_roots(stencil_rows; spatial_phase=(0.0, 0.0))
+    kx, kz = spatial_phase
+    bytime = Dict{Int,ComplexF64}()
+    for r in stencil_rows
+        ox, oz = r.offset
+        phase = cis(kx * ox + kz * oz)
+        bytime[r.time_slot] = get(bytime, r.time_slot, 0.0 + 0.0im) + ComplexF64(r.coef) * phase
+    end
+    slots = sort(collect(keys(bytime)))
+    length(slots) == 3 || return (; slots, coeffs=[bytime[s] for s in slots], roots=ComplexF64[])
+    # polynomial a_future*z^2 + a_present*z + a_past = 0 for modal update.
+    a_past = bytime[slots[1]]
+    a_present = bytime[slots[2]]
+    a_future = bytime[slots[3]]
+    local_roots = ComplexF64[]
+    if abs(a_future) != 0
+        disc = a_present^2 - 4 * a_future * a_past
+        local_roots = [(-a_present + sqrt(disc)) / (2 * a_future), (-a_present - sqrt(disc)) / (2 * a_future)]
+    end
+    return (; slots, coeffs=(past=a_past, present=a_present, future=a_future), roots=local_roots, spectral_radius=isempty(local_roots) ? NaN : maximum(abs, local_roots))
+end
+
+function local_stability_scan(stencil_rows; phases=(0.0, pi/4, pi/2, pi))
+    rows = NamedTuple[]
+    for kx in phases, kz in phases
+        d = local_time_symbol_roots(stencil_rows; spatial_phase=(kx, kz))
+        push!(rows, (kx=kx, kz=kz, spectral_radius=d.spectral_radius, roots=d.roots, coeffs=d.coeffs))
+    end
+    sort!(rows, by=r -> -r.spectral_radius)
+    return rows
 end
 
 function elastic_lame_from_rho_vp_vs(rho, vp, vs; rho_scale=1000.0, velocity_scale=1000.0)
