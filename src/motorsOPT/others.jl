@@ -506,7 +506,7 @@ function bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplines
     @unpack exprs,fields,vars,coordinates,∂ = equationCharacteristics
     @unpack orderExpressions = ordersForSplines
 
-    bigα=Array{Any,2}(missing,NtypeofFields,NtypeofExpr)
+    bigα=Array{Any,2}(missing,NtypeofExpr,NtypeofFields)
     varM=nothing
     pointsUsedForFields=orderExpressions
 
@@ -515,7 +515,7 @@ function bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplines
             
             tmpNonZeroAlphas=PDECoefFinder(orderExpressions,coordinates,exprs[iExpr],fields[iField],vars) 
             # we assume that the pointsUsedForFields represent the highest order of partials
-            bigα[iField,iExpr]=unique(tmpNonZeroAlphas)
+            bigα[iExpr,iField]=unique(tmpNonZeroAlphas)
         end
     end
     varM,CartesianDependencies=varMmaker(pointsUsedForFields,coordinates,vars,∂)

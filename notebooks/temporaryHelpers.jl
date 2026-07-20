@@ -311,12 +311,25 @@ function symmetry_report(frames, center)
     return [(frame=i, symmetry_error(frame, center)...) for (i, frame) in pairs(frames)]
 end
 
+function _frame2d(frame)
+    ndims(frame) == 2 && return frame
+    ndims(frame) == 3 && size(frame, 3) == 1 && return @view frame[:, :, 1]
+    error("expected a 2D frame or a 3D scalar frame with size(frame, 3) == 1; got size $(size(frame))")
+end
+
+function _default_nonzero_snapshot_indices(frames; maxframes=9, atol=0.0)
+    nz = [i for i in eachindex(frames) if maximum(abs, _frame2d(frames[i])) > atol]
+    pool = isempty(nz) ? collect(eachindex(frames)) : nz
+    return unique(round.(Int, range(first(pool), last(pool), length=min(maxframes, length(pool)))))
+end
+
 function plot_wave_snapshots(frames; indices=nothing, sourcePoint=nothing, clim=nothing, ncols=3, title="wave snapshots")
     isempty(frames) && error("frames is empty")
     if indices === nothing
-        indices = unique(round.(Int, range(1, length(frames), length=min(9, length(frames)))))
+        indices = _default_nonzero_snapshot_indices(frames)
     end
-    maxima = [maximum(abs, frames[i]) for i in indices]
+    panels = [_frame2d(frames[i]) for i in indices]
+    maxima = [maximum(abs, panel) for panel in panels]
     if clim === nothing
         vmax = maximum(maxima)
         clim = vmax == 0 ? 1.0 : vmax
@@ -327,14 +340,14 @@ function plot_wave_snapshots(frames; indices=nothing, sourcePoint=nothing, clim=
     for (k, iframe) in enumerate(indices)
         r = cld(k, ncols)
         c = k - (r - 1) * ncols
-        ax = Axis(fig[r, c], aspect=DataAspect(), title="frame $iframe")
-        heatmap!(ax, frames[iframe]; colormap=:balance, colorrange=(-clim, clim))
+        ax = Axis(fig[r, c], aspect=DataAspect(), title="frame $iframe, max=$(round(maxima[k], sigdigits=3))")
+        heatmap!(ax, panels[k]; colormap=:balance, colorrange=(-clim, clim))
         if sourcePoint !== nothing
             xy = Tuple(sourcePoint)
             scatter!(ax, [xy[1]], [xy[2]], color=:red, markersize=8)
         end
     end
-    Label(fig[0, :], title)
+    Label(fig[0, :], "$title, clim=$(round(clim, sigdigits=3))")
     return fig
 end
 
