@@ -236,7 +236,7 @@ end
 function famousEquation(::Val{:eq_2DsismoTimeIsoHomo})
 
     # 2D wave equation with double couple source
-    @variables ρ (C)[1:2,1:2,1:2,1:2] u(x,y,t)[1:2] (M(x,y))[1:2,1:2]
+    @variables ρ (C)[1:2,1:2,1:2,1:2] u(x,y,t)[1:2] (M(x,y,t))[1:2,1:2]
     @variables λ μ
     δ=Matrix(I, 2, 2) # Kronecker's delta
     @tullio C[i,j,k,l] := λ * δ[i,j]*δ[k,l]+μ*(δ[i,k]*δ[j,l]+δ[i,l]*δ[j,k])
@@ -259,7 +259,7 @@ end
 function famousEquation(::Val{:eq_2DsismoTimeIsoHetero})
 
     # 2D wave equation with double couple source
-    @variables ρ(x,y) (C(x,y))[1:2,1:2,1:2,1:2] u(x,y,t)[1:2] (M(x,y))[1:2,1:2]
+    @variables ρ(x,y) (C(x,y))[1:2,1:2,1:2,1:2] u(x,y,t)[1:2] (M(x,y,t))[1:2,1:2]
     @variables λ(x,y) μ(x,y)
     δ=Matrix(I, 2, 2) # Kronecker's delta
     @tullio C[i,j,k,l] := λ * δ[i,j]*δ[k,l]+μ*(δ[i,k]*δ[j,l]+δ[i,l]*δ[j,k])

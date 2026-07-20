@@ -434,7 +434,7 @@ function _investigateDependencies(::Val{N},
 
         tmpVec = ((car2vec(multiPointsIndices[end]) .- 1) .÷ 2) .+ 1
 
-        if timeMarching
+        if timeMarching && car2vec(multiPointsIndices[end])[end] > 1
             tmpVec[end] = car2vec(multiPointsIndices[end])[end] - 1
         end
 
