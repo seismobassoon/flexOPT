@@ -1,7 +1,7 @@
 
 # some constants which can be useful for global Earth
 
-correlationLengthDefault=(20e3,20e3,20e2) # not yet fully understood this for DIV interpolation
+correlationLengthDefault=(20e3,20e3,20e3) # not yet fully understood this for DIV interpolation
 epsilon2Default =1.;
 
 
@@ -24,9 +24,9 @@ function giveMaskPX(Xs,Ys,Zs)
     end
 end
 
-interpolateField(Xs,Ys,Xnode,Ynode;correlationLength=correlationLengthDefault,epsilon2=epsilon2Default) = interpolateField(Xs,Ys,nothing,Xnode,Ynode,nothing;correlationLength=correlationLength,epsilon2=epsilon2)
+interpolateField(rawField,Xs,Ys,Xnode,Ynode;correlationLength=(correlationLengthDefault[1],correlationLengthDefault[3]),epsilon2=epsilon2Default) = interpolateField(rawField,Xs,Ys,nothing,Xnode,Ynode,nothing;correlationLength=correlationLength,epsilon2=epsilon2)
 
-function interpolateField(Xs,Ys,Zs,Xnode,Ynode,Znode;correlationLength=correlationLengthDefault,epsilon2=epsilon2Default) 
+function interpolateField(rawField,Xs,Ys,Zs,Xnode,Ynode,Znode;correlationLength=correlationLengthDefault,epsilon2=epsilon2Default) 
     masks = giveMaskPX(Xs,Ys,Zs)
     if Znode === nothing
         XXnodes = (Xnode,Ynode)

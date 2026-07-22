@@ -13,6 +13,7 @@ module commonBatchs
     include("batchFiles/batchInterpolations.jl")
 
     export SVector, @SVector
+    export interpolateField,getCartesianField
     export myProduceOrLoad,lazyProduceOrLoad, @strdict, @unpack
     export getColorPalette, regenerataionColorMap, color2Float
     export safeget, _paramget

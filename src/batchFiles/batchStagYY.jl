@@ -494,10 +494,28 @@ function readStagYYFiles(file)
 end
 
 
+function getCartesianField(file,Xs,Ys,Zs;rotationAngles=(θshift=0.0, ϕshift=0.0),correlationLength=(20e3,20e3,20e3),epsilon2=1.)
+    # 3D
+    fieldSpherical = readStagYYFilesAverage(file;rotationAngles=rotationAngles)
+    field = interpolateField(fieldSpherical.field,Xs,Ys,Zs,fieldSpherical.Xnode,fieldSpherical.Ynode,fieldSpherical.Znode;correlationLength=correlationLength,epsilon2=epsilon2) 
+    avField = interpolateField(fieldSpherical.avField,Xs,Ys,Zs,fieldSpherical.Xnode,fieldSpherical.Ynode,fieldSpherical.Znode;correlationLength=correlationLength,epsilon2=epsilon2) 
+    diffField = interpolateField(fieldSpherical.diffField,Xs,Ys,Zs,fieldSpherical.Xnode,fieldSpherical.Ynode,fieldSpherical.Znode;correlationLength=correlationLength,epsilon2=epsilon2) 
+    return (field=field,avField=avField,diffField=diffField)
+end
 
 
+function getCartesianField(file,Xs,Ys;rotationAngles=(θshift=0.0, ϕshift=0.0),correlationLength=(20e3,20e3),epsilon2=1.)
+    # 2D
+    fieldSpherical = readStagYYFilesAverage(file;rotationAngles=rotationAngles)
+    field = interpolateField(fieldSpherical.field,Xs,Ys,fieldSpherical.Xnode,fieldSpherical.Ynode;correlationLength=correlationLength,epsilon2=epsilon2) 
+    avField = interpolateField(fieldSpherical.avField,Xs,Ys,fieldSpherical.Xnode,fieldSpherical.Ynode;correlationLength=correlationLength,epsilon2=epsilon2) 
+    diffField = interpolateField(fieldSpherical.diffField,Xs,Ys,fieldSpherical.Xnode,fieldSpherical.Ynode;correlationLength=correlationLength,epsilon2=epsilon2) 
+    return (field=field,avField=avField,diffField=diffField)
+end
 
-function readStagYYFilesAverage(file;θshift=0.0, ϕshift=0.0)
+
+function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
+    @unpack θshift,ϕshift = rotationAngles
     magic, inputILEN, byte_reverse_in, io=read_magic(file)
     magic,nval = evaluate_nval_from_magicNumber(magic)
     intDataType,floatDataType,dx,dy,nx,ny,nz,nb,nnx,nny,nnz,nnb,rcmb,iStep,time,zc,boolSpherical=read_header(io,inputILEN,magic)
@@ -676,10 +694,10 @@ function readStagYYFilesAverage(file;θshift=0.0, ϕshift=0.0)
         newField=reshape(newField,(ny+2)*(nz+2))
         avNewField=reshape(avNewField,(ny+2)*(nz+2))
         diffNewField=reshape(diffNewField,(ny+2)*(nz+2))
-        return newField, avNewField, diffNewField, Xnode, Ynode, rcmb
+        return (field=newField, avField=avNewField, diffField=diffNewField, Xnode=Xnode, Ynode=Ynode, rcmb=rcmb)
     else
         newField=reshape(newField,(nx+2)*(ny+2)*(nz+2))
-        return newField, Xnode, Ynode, Znode, rcmb
+        return (field=newField, Xnode=Xnode, Ynode=Ynode, Znode=Znode, rcmb=rcmb)
     end
    #fieldInterpolated=interpolate(nodes,newField,Gridded(Linear()))
 
