@@ -323,6 +323,31 @@ function _default_nonzero_snapshot_indices(frames; maxframes=9, atol=0.0)
     return unique(round.(Int, range(first(pool), last(pool), length=min(maxframes, length(pool)))))
 end
 
+function record_wave_component_video(frames; videoFile, sourcePoint=nothing, background=nothing, framerate=20, title="wavefield", colormap=:balance, clim=nothing)
+    isempty(frames) && error("frames is empty")
+    panels = [_frame2d(frame) for frame in frames]
+    if clim === nothing
+        vmax = maximum(maximum(abs, panel) for panel in panels if all(isfinite, panel))
+        clim = vmax == 0 ? 1.0 : vmax
+    end
+    fig = Figure(size=(760, 640))
+    ax = Axis(fig[1, 1], aspect=DataAspect(), title=title)
+    if background !== nothing
+        heatmap!(ax, Float64.(background); colormap=:grays, colorrange=extrema(Float64.(background)))
+    end
+    obs = Observable(Float64.(panels[1]))
+    heatmap!(ax, obs; colormap=colormap, colorrange=(-clim, clim))
+    if sourcePoint !== nothing
+        xy = Tuple(sourcePoint)
+        scatter!(ax, [xy[1]], [xy[2]], color=:red, markersize=8)
+    end
+    record(fig, videoFile, eachindex(panels); framerate=framerate) do i
+        obs[] = Float64.(panels[i])
+        ax.title = "$title frame $i/$(length(panels)), max=$(round(maximum(abs, panels[i]), sigdigits=3))"
+    end
+    return videoFile
+end
+
 function plot_wave_snapshots(frames; indices=nothing, sourcePoint=nothing, clim=nothing, ncols=3, title="wave snapshots")
     isempty(frames) && error("frames is empty")
     if indices === nothing
@@ -359,16 +384,8 @@ function build_toy_opt_prepared(; velocity_value=2600.0, shape=(201,201), dx=100
     delta = (dx, dx, dt_value)
     fieldItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
     materItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
-    params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
-    old_backend = Main.flexOPT.backend
-    if recipe_backend !== nothing
-        Main.flexOPT.backend = recipe_backend
-    end
-    optRec = try
-        Main.flexOPT.makeOPTsemiSymbolic(params)
-    finally
-        Main.flexOPT.backend = old_backend
-    end
+    params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl recipe_backend
+    optRec = Main.flexOPT.makeOPTsemiSymbolic(params)
     recette = optRec["recette"]
     modelPoints = Main.flexOPT.getModelPoints(velocity, pointsInTime, recette.numbersOfTheSystem.numbersOfTheSystemL.timeMarching)
     material_model = occursin("Homo", famousEquationType) ? Float64(velocity_value) : velocity
@@ -964,6 +981,74 @@ function point_source_full(preparedLin, point::CartesianIndex, timeSignal; iForc
     return make_source_full(preparedLin, weights, timeSignal; iForceField=iForceField, amplitude=amplitude)
 end
 
+function direct_force_source_full(preparedLin, point::CartesianIndex, timeSignal; fx=0.0, fz=1.0, amplitude=1.0, normalise=:none)
+    preparedLin.NForceField >= 2 || error("direct force source expects at least two force fields (fx,fz); got $(preparedLin.NForceField)")
+    weights = point_source_weights(preparedLin, point; normalise=normalise)
+    sourceFull = zeros(Float64, preparedLin.NforcePoints, preparedLin.NForceField, length(timeSignal))
+    fx = Float64(fx)
+    fz = Float64(fz)
+    amplitude = Float64(amplitude)
+    for it in eachindex(timeSignal)
+        a = amplitude * Float64(timeSignal[it])
+        sourceFull[:, 1, it] .= a * fx .* weights
+        sourceFull[:, 2, it] .= a * fz .* weights
+    end
+    return sourceFull
+end
+
+function double_couple_moment_source_full(preparedLin, point::CartesianIndex, timeSignal;
+    M11=1.0, M22=-1.0, M12=1.0, M21=M12, amplitude=1.0, normalise=:none)
+    preparedLin.NForceField >= 4 || error("moment double-couple source expects four force fields (M11,M12,M21,M22); got $(preparedLin.NForceField)")
+    weights = point_source_weights(preparedLin, point; normalise=normalise)
+    sourceFull = zeros(Float64, preparedLin.NforcePoints, preparedLin.NForceField, length(timeSignal))
+    moment = Float64.((M11, M12, M21, M22))
+    amplitude = Float64(amplitude)
+    for it in eachindex(timeSignal)
+        a = amplitude * Float64(timeSignal[it])
+        for iM in 1:4
+            sourceFull[:, iM, it] .= a * moment[iM] .* weights
+        end
+    end
+    return sourceFull
+end
+
+function fd_double_couple_force_source_full(preparedLin, point::CartesianIndex, timeSignal;
+    M11=1.0, M22=-1.0, M12=1.0, M21=M12, dx=1.0, dz=1.0, amplitude=1.0, sign=1.0)
+    preparedLin.NForceField >= 2 || error("FD double-couple source expects two force fields (fx,fz); got $(preparedLin.NForceField)")
+    LI = LinearIndices(preparedLin.spaceShape)
+    fx = zeros(Float64, preparedLin.NforcePoints)
+    fz = zeros(Float64, preparedLin.NforcePoints)
+    i0, j0 = Tuple(point)
+
+    function add!(w, I, value)
+        idx = Tuple(I)
+        all(1 <= idx[d] <= preparedLin.spaceShape[d] for d in eachindex(idx)) || return nothing
+        w[LI[I]] += value
+        return nothing
+    end
+
+    ddx = 1 / (2Float64(dx))
+    ddz = 1 / (2Float64(dz))
+    sgn = Float64(sign)
+    add!(fx, CartesianIndex(i0 + 1, j0),  sgn * Float64(M11) * ddx)
+    add!(fx, CartesianIndex(i0 - 1, j0), -sgn * Float64(M11) * ddx)
+    add!(fx, CartesianIndex(i0, j0 + 1),  sgn * Float64(M12) * ddz)
+    add!(fx, CartesianIndex(i0, j0 - 1), -sgn * Float64(M12) * ddz)
+    add!(fz, CartesianIndex(i0 + 1, j0),  sgn * Float64(M21) * ddx)
+    add!(fz, CartesianIndex(i0 - 1, j0), -sgn * Float64(M21) * ddx)
+    add!(fz, CartesianIndex(i0, j0 + 1),  sgn * Float64(M22) * ddz)
+    add!(fz, CartesianIndex(i0, j0 - 1), -sgn * Float64(M22) * ddz)
+
+    sourceFull = zeros(Float64, preparedLin.NforcePoints, preparedLin.NForceField, length(timeSignal))
+    amplitude = Float64(amplitude)
+    for it in eachindex(timeSignal)
+        a = amplitude * Float64(timeSignal[it])
+        sourceFull[:, 1, it] .= a .* fx
+        sourceFull[:, 2, it] .= a .* fz
+    end
+    return sourceFull
+end
+
 function propagate_linear_frames_with_source(preparedLin, Nt; initialPast=nothing, initialPresent=nothing,
     sourceFull=nothing, store_every=1, blowup_limit=Inf, diagonal_shift=0.0)
     NField = preparedLin.NField
@@ -1055,16 +1140,8 @@ function build_opt_prepared(famousEquationType, models, delta; pointsInSpace=3, 
     modelName="OPT_model", recipe_backend=CPU())
     fieldItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
     materItpl = (ptsSpace=1, ptsTime=1, offsetSpace=1, offsetTime=1, YorderBspace=YorderBspace, YorderBtime=YorderBtime)
-    params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl
-    old_backend = Main.flexOPT.backend
-    if recipe_backend !== nothing
-        Main.flexOPT.backend = recipe_backend
-    end
-    optRec = try
-        Main.flexOPT.makeOPTsemiSymbolic(params)
-    finally
-        Main.flexOPT.backend = old_backend
-    end
+    params = @strdict famousEquationType Δ=delta orderBtime orderBspace pointsInSpace pointsInTime supplementaryOrder fieldItpl materItpl recipe_backend
+    optRec = Main.flexOPT.makeOPTsemiSymbolic(params)
     recette = optRec["recette"]
     modelPoints = Main.flexOPT.getModelPoints(models[1], pointsInTime, recette.numbersOfTheSystem.numbersOfTheSystemL.timeMarching)
     modelFam = (models=models, modelPoints=modelPoints, Δ=delta, modelName=modelName)
@@ -1183,7 +1260,7 @@ function recipe_lhs_evaluated_matrices(optRec, material_values; iExpr=1, iField=
     for (role, M) in mats
         E = similar(M, Float64)
         for I in CartesianIndices(M)
-            E[I] = Float64(Symbolics.value(Symbolics.substitute(M[I], subs)))
+            E[I] = Float64(Main.flexOPT.Symbolics.value(Main.flexOPT.Symbolics.substitute(M[I], subs)))
         end
         out[role] = E
     end
@@ -1257,9 +1334,69 @@ function compare_recipe_to_assembled_at_point(optCase, point::CartesianIndex; iE
     material_values = local_material_values_from_models(optCase, point; geometry=geometry)
     recipe = recipe_lhs_evaluated_summary(optCase.optRec, material_values; iExpr=iExpr, iField=iField, geometry=geometry)
     assembled_rows = operator_stencil_at_point(optCase.numOps, point; which=:left, iExpr=iExpr)
-    assembled = stencil_time_matrices(assembled_rows; radius=1)
+    assembled = stencil_matrices_by_time(assembled_rows; radius=1)
     variables = recipe_variable_report(optCase.optRec; side=:left)
     return (; variables, material_values, recipe, assembled)
+end
+
+function prepared_lhs_stencil_at_point(preparedLin, point::CartesianIndex; iExpr=1, iField=1, atol=0.0)
+    spaceShape = preparedLin.spaceShape
+    NpointsSpace = preparedLin.NpointsSpace
+    NField = preparedLin.NField
+    LI = LinearIndices(spaceShape)
+    pointLinear = LI[point]
+    row = pointLinear + (iExpr - 1) * NpointsSpace
+    rows = NamedTuple[]
+
+    function push_rows_from_matrix!(M, time_slot, time_role)
+        for ptr in M.colptr[1]:M.colptr[end]-1
+            M.rowval[ptr] == row || continue
+            col = Int(searchsortedlast(M.colptr, ptr))
+            localPoint = ((col - 1) % NpointsSpace) + 1
+            localField = ((col - localPoint) ÷ NpointsSpace) + 1
+            localField == iField || continue
+            coef = M.nzval[ptr]
+            abs(coef) > atol || continue
+            jPoint = CartesianIndices(spaceShape)[localPoint]
+            push!(rows, (
+                time_slot=time_slot,
+                time_role=time_role,
+                offset=Tuple(jPoint - point),
+                coef=Float64(real(coef)),
+                abscoef=abs(Float64(real(coef))),
+                col=col,
+            ))
+        end
+    end
+
+    # Prepared linear systems use A_unknown for the future level and L_known for past/present.
+    push_rows_from_matrix!(preparedLin.L_known[:, 1:(NpointsSpace * NField)], 1, :past_2)
+    push_rows_from_matrix!(preparedLin.L_known[:, (NpointsSpace * NField + 1):(2 * NpointsSpace * NField)], 2, :present)
+    push_rows_from_matrix!(preparedLin.A_unknown, 3, :future)
+    sort!(rows, by = r -> (r.time_slot, r.offset...))
+    return rows
+end
+
+function prepared_elastic_lhs_local_diagnostics(preparedLin, point, rho, lambda, mu; atol=0.0)
+    rows = NamedTuple[]
+    matrices = Dict{Tuple{Int,Int},Any}()
+    comparisons = Dict{Tuple{Int,Int},Any}()
+    stability = Dict{Tuple{Int,Int},Any}()
+    for iExpr in 1:2, iField in 1:2
+        st = prepared_lhs_stencil_at_point(preparedLin, point; iExpr=iExpr, iField=iField, atol=atol)
+        ref = fd3_elastic_reference_stencil(rho, lambda, mu; iExpr=iExpr, iField=iField)
+        matrices[(iExpr, iField)] = stencil_matrices_by_time(st)
+        comparisons[(iExpr, iField)] = compare_stencil_to_reference_matrices(st, ref)
+        stability[(iExpr, iField)] = local_stability_scan(st)
+        push!(rows, (
+            iExpr=iExpr,
+            iField=iField,
+            summary=stencil_time_summary(st),
+            comparison=comparisons[(iExpr, iField)],
+            worst_stability=stability[(iExpr, iField)][1],
+        ))
+    end
+    return (; rows, matrices, comparisons, stability)
 end
 
 function fd3_elastic_reference_stencil(rho, lambda, mu; iExpr=1, iField=1)
@@ -1303,14 +1440,17 @@ function fd3_elastic_reference_stencil(rho, lambda, mu; iExpr=1, iField=1)
 end
 
 function compare_stencil_to_reference_matrices(stencil_rows, reference_mats; radius=1)
-    opt = stencil_matrices_by_time(stencil_rows; radius=radius)
+    opt = Dict(o.time_slot => o for o in stencil_matrices_by_time(stencil_rows; radius=radius))
+    ref = Dict(r.time_slot => r for r in reference_mats)
     rows = NamedTuple[]
-    for (o, f) in zip(opt, reference_mats)
+    for time_slot in sort(collect(union(keys(opt), keys(ref))))
+        o = get(opt, time_slot, (time_slot=time_slot, time_role=get(ref, time_slot, (time_role=:unknown,)).time_role, matrix=zeros(Float64, 2radius + 1, 2radius + 1)))
+        f = get(ref, time_slot, (time_slot=time_slot, time_role=o.time_role, matrix=zeros(Float64, size(o.matrix))))
         D = o.matrix .- f.matrix
         optmax = maximum(abs, o.matrix)
         refmax = maximum(abs, f.matrix)
         push!(rows, (
-            time_slot=o.time_slot,
+            time_slot=time_slot,
             time_role=o.time_role,
             opt_sum=sum(o.matrix),
             ref_sum=sum(f.matrix),
@@ -1371,9 +1511,10 @@ function local_stability_scan(stencil_rows; phases=(0.0, pi/4, pi/2, pi))
     rows = NamedTuple[]
     for kx in phases, kz in phases
         d = local_time_symbol_roots(stencil_rows; spatial_phase=(kx, kz))
-        push!(rows, (kx=kx, kz=kz, spectral_radius=d.spectral_radius, roots=d.roots, coeffs=d.coeffs))
+        spectral_radius = hasproperty(d, :spectral_radius) ? d.spectral_radius : NaN
+        push!(rows, (kx=kx, kz=kz, spectral_radius=spectral_radius, roots=d.roots, coeffs=d.coeffs))
     end
-    sort!(rows, by=r -> -r.spectral_radius)
+    sort!(rows, by=r -> isfinite(r.spectral_radius) ? -r.spectral_radius : Inf)
     return rows
 end
 

@@ -3,6 +3,39 @@ using KernelAbstractions
 opt_integral_order = :ln_lc
 
 
+function _opt_paramget(params::Dict, name::Symbol, default)
+    return get(params, String(name), get(params, name, default))
+end
+
+function _normalise_recipe_backend(backend_spec)
+    if backend_spec === nothing || backend_spec === :auto || backend_spec == "auto"
+        return backend
+    elseif backend_spec === :cpu || backend_spec == "cpu"
+        return CPU()
+    elseif backend_spec === :gpu || backend_spec == "gpu"
+        return backend
+    elseif backend_spec === :metal || backend_spec == "metal"
+        if isdefined(Main, :Metal)
+            return getproperty(Main.Metal, :MetalBackend)()
+        end
+        @warn "recipe_backend=:metal requested, but Metal is not loaded in Main; using current flexOPT.backend" current_backend=typeof(backend)
+        return backend
+    elseif backend_spec === :cuda || backend_spec == "cuda"
+        if isdefined(Main, :CUDA) && isdefined(Main, :CUDABackend)
+            return Main.CUDABackend()
+        end
+        @warn "recipe_backend=:cuda requested, but CUDA/CUDABackend is not loaded in Main; using current flexOPT.backend" current_backend=typeof(backend)
+        return backend
+    else
+        return backend_spec
+    end
+end
+
+function _recipe_backend_name(recipe_backend)
+    recipe_backend isa KernelAbstractions.CPU && return :cpu
+    return Symbol(lowercase(string(nameof(typeof(recipe_backend)))))
+end
+
 function TaylorOptions(itplParams,supplementaryOrder)
     options=(YorderBspace=itplParams.YorderBspace,YorderBtime=itplParams.YorderBtime,supplementaryOrder=supplementaryOrder,pointsμInSpace=itplParams.ptsSpace,pointsμInTime=itplParams.ptsTime,offsetμInΔyInSpace=itplParams.offsetSpace,offsetμInΔyInTime=itplParams.offsetTime)
     return options
@@ -10,6 +43,7 @@ end
 
 function makeOPTsemiSymbolic(params::Dict)
     @unpack famousEquationType, Δ, orderBtime, orderBspace, pointsInSpace, pointsInTime, supplementaryOrder, fieldItpl, materItpl = params
+    recipe_backend = _normalise_recipe_backend(_opt_paramget(params, :recipe_backend, _opt_paramget(params, :coefficient_backend, :auto)))
     Δnum = SVector(Δ)
     # construction of NamedTuples
     trialFunctionsCharacteristics=(orderBtime=orderBtime,orderBspace=orderBspace,pointsInSpace=pointsInSpace,pointsInTime=pointsInTime)
@@ -29,7 +63,7 @@ function makeOPTsemiSymbolic(params::Dict)
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
 
-    Ajiννᶜ,Ulocal,Cˡη=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
+    Ajiννᶜ,Ulocal,Cˡη=constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM; recipe_backend=recipe_backend)
     lhs=(Ajiννᶜ=Ajiννᶜ,Ulocal=Ulocal,varM=varM,CartesianDependencies=CartesianDependencies)
 
     # compact coefficients for r.h.s. of the equation
@@ -38,7 +72,7 @@ function makeOPTsemiSymbolic(params::Dict)
     numbersOfTheSystem = numbersOfTheSystemR
     _,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ=investigateDependencies(equationCharacteristics,numbersOfTheSystem,trialFunctionsCharacteristics,TaylorOptionsμ,TaylorOptionsμᶜ)
     bigα,varM,CartesianDependencies=bigαFinder(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ)
-    Γjiννᶜ,Flocal,CˡηForce =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM)
+    Γjiννᶜ,Flocal,CˡηForce =constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM; recipe_backend=recipe_backend)
     rhs=(Γjiννᶜ=Γjiννᶜ,Flocal=Flocal,varF=varM,CartesianDependencies=CartesianDependencies)
 
     #
@@ -47,17 +81,17 @@ function makeOPTsemiSymbolic(params::Dict)
     nConfigurations=size(nodes)[1]
     numbersOfTheSystem=(numbersOfTheSystemL=numbersOfTheSystemL,numbersOfTheSystemR=numbersOfTheSystemR,nConfigurations=nConfigurations)
     fieldNames=(fields=fields, extfields=extfields)
-    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem,fieldNames=fieldNames,Cˡη=Cˡη,CˡηForce=CˡηForce)
+    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem,fieldNames=fieldNames,Cˡη=Cˡη,CˡηForce=CˡηForce, recipe_backend=_recipe_backend_name(recipe_backend), recipe_backend_type=string(typeof(recipe_backend)))
     return @strdict(recette)
 
 end
 
 
-function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=true)
-    return constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=ImakeReport)
+function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend)
+    return constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=ImakeReport, recipe_backend=recipe_backend)
 end
 
-function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true)
+function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend)
     
     # for the future develpments: ν can move but it's already more or less coded! look at pointν and nGeometry
 
@@ -212,13 +246,15 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
 
 
     
+    selected_backend = _normalise_recipe_backend(recipe_backend)
+    coefficientFloat = selected_backend isa KernelAbstractions.CPU ? Float64 : Float32
+
     #region adapt the arrays to the GPU backend
-    tableForμPoints_gpu = Adapt.adapt(backend,tableForμPoints)
-    tableForμᶜPoints_gpu = Adapt.adapt(backend,tableForμᶜPoints)
-    tableForLoop_gpu = Adapt.adapt(backend,tableForLoop)
-    coefficientFloat = backend isa KernelAbstractions.CPU ? Float64 : Float32
-    C_gpu = Adapt.adapt(backend,coefficientFloat.(Cˡη))
-    Cᶜ_gpu = Adapt.adapt(backend,coefficientFloat.(Cˡηᶜ))
+    tableForμPoints_gpu = Adapt.adapt(selected_backend,tableForμPoints)
+    tableForμᶜPoints_gpu = Adapt.adapt(selected_backend,tableForμᶜPoints)
+    tableForLoop_gpu = Adapt.adapt(selected_backend,tableForLoop)
+    C_gpu = Adapt.adapt(selected_backend,coefficientFloat.(Cˡη))
+    Cᶜ_gpu = Adapt.adapt(selected_backend,coefficientFloat.(Cˡηᶜ))
 
     #endregion
 
@@ -238,9 +274,9 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
         tmpRange = CartesianIndices(tmpMatrix)
         int_total[iCoord,tmpRange] = tmpMatrix
     end
-    int_gpu = Adapt.adapt(backend,int_total)
+    int_gpu = Adapt.adapt(selected_backend,int_total)
 
-    output_gpu = Adapt.adapt(backend, zeros(coefficientFloat, nPoints, nPoints, nTotalSmallα, nGeometry))
+    output_gpu = Adapt.adapt(selected_backend, zeros(coefficientFloat, nPoints, nPoints, nTotalSmallα, nGeometry))
 
     #endregion
 
@@ -267,10 +303,10 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     #@show typeof(P) typeof(L) typeof(nDim) typeof(nα) typeof(int1max) typeof(int2max)
 
     integralOrderFlag = (isdefined(@__MODULE__, :opt_integral_order) && opt_integral_order == :lc_ln) ? Int32(2) : Int32(1)
-    kernel! = windowContraction!(backend,(8,8,8))#,128,size(output_gpu))
+    kernel! = windowContraction!(selected_backend,(8,8,8))#,128,size(output_gpu))
     kernel!(output_gpu, C_gpu, Cᶜ_gpu, int_gpu, tableForLoop_gpu,tableForμPoints_gpu,tableForμᶜPoints_gpu,
        P,Pμᶜ,Pμ,L,nDim,nα,int1max,int2max,nGeometry_gpu,integralOrderFlag,ndrange=(P,P,nα*nGeometry))
-    KernelAbstractions.synchronize(backend)
+    KernelAbstractions.synchronize(selected_backend)
 
     # Here output_gpu[x',x,eachα] ∑μ' ∑μ ∑l' ∑ l C[x',l',μ'] C[x,l,μ] ∏_iCoord K[iCoord][l-n,l'-n',μ,μ']
     # with (n',n) depends on eachα and x=η+μ0

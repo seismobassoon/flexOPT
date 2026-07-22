@@ -202,7 +202,7 @@ function _evaluate_recipe(recipe::CoefficientRecipe, materialMapping::Dict)
     if isempty(recipe.vars)
         return recipe.constant
     end
-    return recipe.f((materialMapping[v] for v in recipe.vars)...)
+    return recipe.f([materialMapping[v] for v in recipe.vars])
 end
 
 function _evaluate_recipe(recipe::ComplexCoefficientRecipe, materialMapping::Dict)
