@@ -531,7 +531,18 @@ function theta_phi_shift(R, p1::GeoPoint)
     Δθ = θ2 - θ1
     Δφ = mod(φ2 - φ1 + 180, 360) - 180
 
-    return (; Δθ, Δφ, θ1, φ1, θ2, φ2)
+    # StagYY angular nodes are expressed in radians. Keep the degree-valued
+    # diagnostics as well because GeoPoint latitude/longitude use degrees.
+    return (
+        θshift=deg2rad(Δθ),
+        ϕshift=deg2rad(Δφ),
+        Δθ,
+        Δφ,
+        θ1,
+        φ1,
+        θ2,
+        φ2,
+    )
 end
 
 """
@@ -575,6 +586,96 @@ function transform_geopoints(
     angles
 end
 
+"""
+    effective_cartesian_coordinates(points; plane=:xz)
+
+Return point-wise Cartesian query coordinates derived from a transformed
+`GeoPoint` array. These coordinates may be non-separable after an
+ellipsoid-to-sphere transformation and are intended for sampling a spherical
+field; they do not replace the regular `allGridsInCartesian` coordinates.
+
+Supported planes are `:xy`, `:xz`, and `:yz`. The returned `X` and `Y` arrays
+have the same shape as `points`.
+"""
+function effective_cartesian_coordinates(
+    points::AbstractArray{<:GeoPoint};
+    plane::Symbol=:xz,
+)
+    components = if plane === :xy
+        (1, 2)
+    elseif plane === :xz
+        (1, 3)
+    elseif plane === :yz
+        (2, 3)
+    else
+        throw(ArgumentError("plane must be :xy, :xz, or :yz; got $plane"))
+    end
+
+    i, j = components
+    X = map(point -> point.ecef[i], points)
+    Y = map(point -> point.ecef[j], points)
+    return (; X, Y)
+end
+
+"""
+    effective_cartesian_coordinates(points, p1, p2;
+        source_planet=:Earth, target_planet=:SphericalEarth, plane=:xz)
+
+Construct point-wise lookup coordinates by radially deforming the source
+ellipsoid into the target ellipsoid and rotating the result from `p1` to `p2`.
+For an ellipsoid-to-sphere conversion, the fractional radius relative to the
+source surface is preserved, so the centre maps to the centre and the complete
+ellipsoidal surface maps to the spherical surface.
+"""
+function effective_cartesian_coordinates(
+    points::AbstractArray{<:GeoPoint},
+    p1::GeoPoint,
+    p2::GeoPoint;
+    source_planet::Symbol=:Earth,
+    target_planet::Symbol=:SphericalEarth,
+    plane::Symbol=:xz,
+)
+    source_ellipsoid = planet_ellipsoid(source_planet)
+    target_ellipsoid = planet_ellipsoid(target_planet)
+    rotation = rotation_between_geopoints(
+        p1, p2;
+        source_planet=source_planet,
+        target_planet=target_planet,
+    )
+
+    transformed = map(points) do point
+        source_point = GeoPoint(
+            point.lat, point.lon;
+            alt=point.alt,
+            ell=source_ellipsoid,
+        )
+        radius = norm(source_point.ecef)
+        if iszero(radius)
+            SVector(0.0, 0.0, 0.0)
+        else
+            direction = source_point.ecef / radius
+            source_surface_radius = inv(sqrt(
+                (direction[1]^2 + direction[2]^2) / source_ellipsoid.a^2 +
+                direction[3]^2 / source_ellipsoid.b^2
+            ))
+            target_surface_radius = inv(sqrt(
+                (direction[1]^2 + direction[2]^2) / target_ellipsoid.a^2 +
+                direction[3]^2 / target_ellipsoid.b^2
+            ))
+            rotation * direction *
+                (radius / source_surface_radius) * target_surface_radius
+        end
+    end
+
+    components = plane === :xy ? (1, 2) :
+                 plane === :xz ? (1, 3) :
+                 plane === :yz ? (2, 3) :
+                 throw(ArgumentError("plane must be :xy, :xz, or :yz; got $plane"))
+    i, j = components
+    X = map(point -> point[i], transformed)
+    Y = map(point -> point[j], transformed)
+    return (; X, Y)
+end
 function localENU(p::GeoPoint, p0::GeoPoint)
     east, north, up = enuBasis(p0)
     d = p.ecef - p0.ecef

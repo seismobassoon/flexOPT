@@ -342,29 +342,28 @@ function readStagYYFiles(file)
 
         # these are the midpoints 
         r_mid = rcmb .+ zc[2,1:nz]
-        theta_mid = (collect(1:1:nx) .- (nx+1)) .* dx .+ 0.5*π .+ 0.5*dx
-        phi_mid = phi = (collect(1:1:ny) .- (ny+1)) .* dy .+ 0.5*dy
+        theta_mid = (collect(1:1:nx) .- (nx+1)) .* dx .+ 0.5*π .+ 0.5*dx .+ θshift
+        phi_mid = (collect(1:1:ny) .- (ny+1)) .* dy .+ 0.5*dy .+ ϕshift
         
         # interpolation should be done with the midpoints + end points
 
-        r_new = prepend!(r_mid,r[1])
-        r_new = push!(r_mid,r[end])
+        r_new = vcat(r[1], r_mid, r[end])
         minR = r[1]
         maxR = r[end]
         rC=r_new
 
-        theta_new = prepend!(theta_mid,theta[1])
-        theta_new = push!(theta_new,theta[end])
+        theta_new = vcat(theta[1], theta_mid, theta[end])
         minθ = theta[1]
         maxθ = theta[end]
-        phi_new = prepend!(phi_mid,phi[1])
-        phi_new = push!(phi_new,phi[end])
+        phi_new = vcat(phi[1], phi_mid, phi[end])
         minϕ = phi[1]
         maxϕ = phi[end]
         if boolFlat
             minθ = 0.
             maxθ = 0.
-            theta_new = (π/2)  # if flat, we are looking at the 
+            # A flat model has one angular dimension; theta rotation is in-plane.
+            phi_new .+= θshift
+            theta_new = (π/2)  # if flat, we are looking at the
             nodes=(theta_new,phi_new,r_new)
         else   
             nodes=(theta_new,phi_new,r_new)
@@ -514,6 +513,59 @@ function getCartesianField(file,Xs,Ys;rotationAngles=(θshift=0.0, ϕshift=0.0),
 end
 
 
+function getCartesianField(
+    file,
+    Xquery::AbstractMatrix{<:Real},
+    Yquery::AbstractMatrix{<:Real};
+    rotationAngles=(θshift=0.0, ϕshift=0.0),
+    correlationLength=(20e3, 20e3),
+    epsilon2=1.0,
+    analysis_size=nothing,
+    max_analysis_points=500_000,
+    clamp_to_surface=true,
+)
+    fieldSpherical = readStagYYFilesAverage(file; rotationAngles=rotationAngles)
+    modelSurfaceRadius = maximum(hypot.(fieldSpherical.Xnode, fieldSpherical.Ynode))
+    queryRadius = hypot.(Xquery, Yquery)
+    if clamp_to_surface
+        radialScale = min.(queryRadius, modelSurfaceRadius) ./ max.(queryRadius, eps(Float64))
+        Xsample = Xquery .* radialScale
+        Ysample = Yquery .* radialScale
+    else
+        Xsample = Xquery
+        Ysample = Yquery
+    end
+    interpolation_options = (
+        correlationLength=correlationLength,
+        epsilon2=epsilon2,
+        analysis_size=analysis_size,
+        max_analysis_points=max_analysis_points,
+    )
+    field = interpolateField(
+        fieldSpherical.field,
+        Xsample,
+        Ysample,
+        fieldSpherical.Xnode,
+        fieldSpherical.Ynode;
+        interpolation_options...,
+    )
+    avField = interpolateField(
+        fieldSpherical.avField,
+        Xsample,
+        Ysample,
+        fieldSpherical.Xnode,
+        fieldSpherical.Ynode;
+        interpolation_options...,
+    )
+    return (
+        field=field,
+        avField=avField,
+        diffField=field .- avField,
+        rcmb=fieldSpherical.rcmb,
+        surfaceRadius=modelSurfaceRadius,
+    )
+end
+
 function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
     @unpack θshift,ϕshift = rotationAngles
     magic, inputILEN, byte_reverse_in, io=read_magic(file)
@@ -545,29 +597,28 @@ function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
 
         # these are the midpoints 
         r_mid = rcmb .+ zc[2,1:nz]
-        theta_mid = (collect(1:1:nx) .- (nx+1)) .* dx .+ 0.5*π .+ 0.5*dx
-        phi_mid = phi = (collect(1:1:ny) .- (ny+1)) .* dy .+ 0.5*dy
+        theta_mid = (collect(1:1:nx) .- (nx+1)) .* dx .+ 0.5*π .+ 0.5*dx .+ θshift
+        phi_mid = (collect(1:1:ny) .- (ny+1)) .* dy .+ 0.5*dy .+ ϕshift
         
         # interpolation should be done with the midpoints + end points
 
-        r_new = prepend!(r_mid,r[1])
-        r_new = push!(r_mid,r[end])
+        r_new = vcat(r[1], r_mid, r[end])
         minR = r[1]
         maxR = r[end]
         rC=r_new
 
-        theta_new = prepend!(theta_mid,theta[1])
-        theta_new = push!(theta_new,theta[end])
+        theta_new = vcat(theta[1], theta_mid, theta[end])
         minθ = theta[1]
         maxθ = theta[end]
-        phi_new = prepend!(phi_mid,phi[1])
-        phi_new = push!(phi_new,phi[end])
+        phi_new = vcat(phi[1], phi_mid, phi[end])
         minϕ = phi[1]
         maxϕ = phi[end]
         if boolFlat
             minθ = 0.
             maxθ = 0.
-            theta_new = (π/2)  # if flat, we are looking at the 
+            # A flat model has one angular dimension; theta rotation is in-plane.
+            phi_new .+= θshift
+            theta_new = (π/2)  # if flat, we are looking at the
             nodes=(theta_new,phi_new,r_new)
         else   
             nodes=(theta_new,phi_new,r_new)

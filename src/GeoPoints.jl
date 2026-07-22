@@ -34,6 +34,7 @@ module GeoPoints
     export GeoPoint, +, -, /, *
     export GeoPointSet,GeoPoints_to_local
     export rotation_between_geopoints, transform_geopoints
+    export theta_phi_shift, effective_cartesian_coordinates
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
     export getParamsAndTopo,getParamsWithoutTopo #, interpolate_params, GMTprecision

@@ -4,6 +4,7 @@ module commonBatchs
     using Symbolics
     using StaticArrays
     using Interpolations
+    using DIVAnd
   
     include("batchFiles/batchDrWatson.jl")
     include("batchFiles/batchImages.jl")

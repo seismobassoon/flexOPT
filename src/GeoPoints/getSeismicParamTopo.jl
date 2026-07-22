@@ -229,17 +229,24 @@ function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Floa
 
     seismicModel = interpolate_params(params, newRadii, effectiveRadii)
 
-     for i in CartesianIndices(allGridsInGeoPoints)
+    for i in CartesianIndices(allGridsInGeoPoints)
         tmpPoint = allGridsInGeoPoints[i]
-        # water column correction
-        if topoInterpolater(tmpPoint.lon,tmpPoint.lat)<=tmpPoint.alt <= 0.0
+        topographyHere = topoInterpolater(tmpPoint.lon, tmpPoint.lat)
 
-            seismicModel.ρ[i]=ρWater
-            seismicModel.Vpv[i]=VpWater
-            seismicModel.Vph[i]=VpWater
-            seismicModel.Vsv[i]=0.0
-            seismicModel.Vsh[i]=0.0
-
+        # Reapply surface materials after interpolate_params, which creates a
+        # fresh NamedTuple and would otherwise overwrite the earlier air mask.
+        if !hasAirModel && topographyHere < tmpPoint.alt
+            seismicModel.ρ[i] = ρAir
+            seismicModel.Vpv[i] = VpAir
+            seismicModel.Vph[i] = VpAir
+            seismicModel.Vsv[i] = 0.0
+            seismicModel.Vsh[i] = 0.0
+        elseif topographyHere <= tmpPoint.alt <= 0.0
+            seismicModel.ρ[i] = ρWater
+            seismicModel.Vpv[i] = VpWater
+            seismicModel.Vph[i] = VpWater
+            seismicModel.Vsv[i] = 0.0
+            seismicModel.Vsh[i] = 0.0
         end
     end
 
