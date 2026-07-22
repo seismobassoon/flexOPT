@@ -312,7 +312,32 @@ end
 
 
 
-function readStagYYFiles(file)
+"""
+    blendPeriodicSeam!(field, angular_step, half_width)
+
+Replace angular cells within `half_width` of the periodic seam by a smooth
+cosine interpolation between clean cells on both sides. This removes a radial
+artifact already present in a StagYY solution before DIVAnd sees it. Set
+`half_width=0` to preserve the raw field.
+"""
+function blendPeriodicSeam!(field::AbstractMatrix, angular_step, half_width)
+    half_width <= 0 && return field
+    n = min(ceil(Int, half_width / abs(angular_step)), (size(field, 1) - 2) ÷ 2)
+    n <= 0 && return field
+
+    leftClean = copy(@view field[end-n, :])
+    rightClean = copy(@view field[n+1, :])
+    numberBlended = 2n
+    for position in 1:numberBlended
+        fraction = position / (numberBlended + 1)
+        weight = 0.5 - 0.5cospi(fraction)
+        row = position <= n ? size(field, 1) - n + position : position - n
+        @views field[row, :] .= (1 - weight) .* leftClean .+ weight .* rightClean
+    end
+    return field
+end
+
+function readStagYYFiles(file; seam_blend_angle=deg2rad(2.0))
     magic, inputILEN, byte_reverse_in, io=read_magic(file)
     magic,nval = evaluate_nval_from_magicNumber(magic)
     intDataType,floatDataType,dx,dy,nx,ny,nz,nb,nnx,nny,nnz,nnb,rcmb,iStep,time,zc,boolSpherical=read_header(io,inputILEN,magic)
@@ -426,6 +451,7 @@ function readStagYYFiles(file)
 
         field = zeros(floatDataType,ny,nz)
         field[1:ny,1:nz]=rawField[1,1,1:ny,1:nz,1]
+        blendPeriodicSeam!(field, dy, seam_blend_angle)
 
 
         newField = zeros(floatDataType,ny+2,nz+2)
@@ -434,19 +460,20 @@ function readStagYYFiles(file)
 
         newField[2:ny+1,2:nz+1] = field[1:end,1:end]
 
-        # 4 'surfaces'
+        # The first and last angular boundaries are the same physical ray.
+        # Average their values so DIVAnd never receives contradictory
+        # observations at identical Cartesian coordinates (the theta=0 seam).
+        periodicBoundary = 0.5 .* (field[1, :] .+ field[end, :])
+        newField[1, 2:nz+1] .= periodicBoundary
+        newField[end, 2:nz+1] .= periodicBoundary
+        newField[2:ny+1, 1] = field[:, 1]
+        newField[2:ny+1, end] = field[:, end]
 
-        newField[1,2:nz+1] = field[1,1:nz]
-        newField[end,2:nz+1] = field[end,1:nz]
-        newField[2:ny+1,1] = field[1:ny,1]
-        newField[2:ny+1,end] = field[1:ny,end]
-
-        # 4 'endpoints'
-
-        newField[1,1,1]=field[1,1,1]
-        newField[1,end,1]=field[1,end,1]
-        newField[1,1,end]=field[1,1,end]
-        newField[1,end,end]=field[1,end,end]
+        # Radial endpoints of the duplicated periodic ray.
+        newField[1, 1] = periodicBoundary[1]
+        newField[end, 1] = periodicBoundary[1]
+        newField[1, end] = periodicBoundary[end]
+        newField[end, end] = periodicBoundary[end]
 
 
     else
@@ -513,6 +540,30 @@ function getCartesianField(file,Xs,Ys;rotationAngles=(θshift=0.0, ϕshift=0.0),
 end
 
 
+function sampleStagYYPolar(
+    fieldMatrix,
+    angleNodes,
+    radiusNodes,
+    Xquery,
+    Yquery,
+)
+    polarInterpolation = interpolate(
+        (angleNodes, radiusNodes),
+        fieldMatrix,
+        Gridded(Linear()),
+    )
+    firstAngle, lastAngle = first(angleNodes), last(angleNodes)
+    angularPeriod = lastAngle - firstAngle
+    firstRadius, lastRadius = extrema(radiusNodes)
+    result = Array{eltype(fieldMatrix)}(undef, size(Xquery))
+    Base.Threads.@threads for index in eachindex(result)
+        angle = firstAngle + mod(atan(Yquery[index], Xquery[index]) - firstAngle, angularPeriod)
+        radius = clamp(hypot(Xquery[index], Yquery[index]), firstRadius, lastRadius)
+        result[index] = polarInterpolation(angle, radius)
+    end
+    return result
+end
+
 function getCartesianField(
     file,
     Xquery::AbstractMatrix{<:Real},
@@ -523,11 +574,34 @@ function getCartesianField(
     analysis_size=nothing,
     max_analysis_points=500_000,
     clamp_to_surface=true,
+    target_cmb_radius=nothing,
+    target_surface_radius=nothing,
+    seam_blend_angle=deg2rad(2.0),
+    interpolation_method=:polar,
 )
-    fieldSpherical = readStagYYFilesAverage(file; rotationAngles=rotationAngles)
+    fieldSpherical = readStagYYFilesAverage(
+        file;
+        rotationAngles=rotationAngles,
+        seam_blend_angle=seam_blend_angle,
+    )
     modelSurfaceRadius = maximum(hypot.(fieldSpherical.Xnode, fieldSpherical.Ynode))
     queryRadius = hypot.(Xquery, Yquery)
-    if clamp_to_surface
+    if target_cmb_radius !== nothing
+        targetSurface = something(target_surface_radius, modelSurfaceRadius)
+        target_cmb_radius < targetSurface || throw(ArgumentError(
+            "target_cmb_radius must be smaller than target_surface_radius",
+        ))
+        mantleFraction = clamp.(
+            (queryRadius .- target_cmb_radius) ./ (targetSurface - target_cmb_radius),
+            0.0,
+            1.0,
+        )
+        sampleRadius = fieldSpherical.rcmb .+
+            mantleFraction .* (modelSurfaceRadius - fieldSpherical.rcmb)
+        radialScale = sampleRadius ./ max.(queryRadius, eps(Float64))
+        Xsample = Xquery .* radialScale
+        Ysample = Yquery .* radialScale
+    elseif clamp_to_surface
         radialScale = min.(queryRadius, modelSurfaceRadius) ./ max.(queryRadius, eps(Float64))
         Xsample = Xquery .* radialScale
         Ysample = Yquery .* radialScale
@@ -535,28 +609,47 @@ function getCartesianField(
         Xsample = Xquery
         Ysample = Yquery
     end
-    interpolation_options = (
-        correlationLength=correlationLength,
-        epsilon2=epsilon2,
-        analysis_size=analysis_size,
-        max_analysis_points=max_analysis_points,
-    )
-    field = interpolateField(
-        fieldSpherical.field,
-        Xsample,
-        Ysample,
-        fieldSpherical.Xnode,
-        fieldSpherical.Ynode;
-        interpolation_options...,
-    )
-    avField = interpolateField(
-        fieldSpherical.avField,
-        Xsample,
-        Ysample,
-        fieldSpherical.Xnode,
-        fieldSpherical.Ynode;
-        interpolation_options...,
-    )
+    if interpolation_method === :polar
+        field = sampleStagYYPolar(
+            fieldSpherical.fieldMatrix,
+            fieldSpherical.angleNodes,
+            fieldSpherical.radiusNodes,
+            Xsample,
+            Ysample,
+        )
+        avField = sampleStagYYPolar(
+            fieldSpherical.avFieldMatrix,
+            fieldSpherical.angleNodes,
+            fieldSpherical.radiusNodes,
+            Xsample,
+            Ysample,
+        )
+    elseif interpolation_method === :divand
+        interpolation_options = (
+            correlationLength=correlationLength,
+            epsilon2=epsilon2,
+            analysis_size=analysis_size,
+            max_analysis_points=max_analysis_points,
+        )
+        field = interpolateField(
+            fieldSpherical.field,
+            Xsample,
+            Ysample,
+            fieldSpherical.Xnode,
+            fieldSpherical.Ynode;
+            interpolation_options...,
+        )
+        avField = interpolateField(
+            fieldSpherical.avField,
+            Xsample,
+            Ysample,
+            fieldSpherical.Xnode,
+            fieldSpherical.Ynode;
+            interpolation_options...,
+        )
+    else
+        throw(ArgumentError("interpolation_method must be :polar or :divand"))
+    end
     return (
         field=field,
         avField=avField,
@@ -566,7 +659,11 @@ function getCartesianField(
     )
 end
 
-function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
+function readStagYYFilesAverage(
+    file;
+    rotationAngles=(θshift=0.0, ϕshift=0.0),
+    seam_blend_angle=deg2rad(2.0),
+)
     @unpack θshift,ϕshift = rotationAngles
     magic, inputILEN, byte_reverse_in, io=read_magic(file)
     magic,nval = evaluate_nval_from_magicNumber(magic)
@@ -676,6 +773,7 @@ function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
 
         field = zeros(floatDataType,ny,nz)
         field[1:ny,1:nz]=rawField[1,1,1:ny,1:nz,1]
+        blendPeriodicSeam!(field, dy, seam_blend_angle)
 
 
         newField = zeros(floatDataType,ny+2,nz+2)
@@ -684,19 +782,20 @@ function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
 
         newField[2:ny+1,2:nz+1] = field[1:end,1:end]
 
-        # 4 'surfaces'
+        # The first and last angular boundaries are the same physical ray.
+        # Average their values so DIVAnd never receives contradictory
+        # observations at identical Cartesian coordinates (the theta=0 seam).
+        periodicBoundary = 0.5 .* (field[1, :] .+ field[end, :])
+        newField[1, 2:nz+1] .= periodicBoundary
+        newField[end, 2:nz+1] .= periodicBoundary
+        newField[2:ny+1, 1] = field[:, 1]
+        newField[2:ny+1, end] = field[:, end]
 
-        newField[1,2:nz+1] = field[1,1:nz]
-        newField[end,2:nz+1] = field[end,1:nz]
-        newField[2:ny+1,1] = field[1:ny,1]
-        newField[2:ny+1,end] = field[1:ny,end]
-
-        # 4 'endpoints'
-
-        newField[1,1,1]=field[1,1,1]
-        newField[1,end,1]=field[1,end,1]
-        newField[1,1,end]=field[1,1,end]
-        newField[1,end,end]=field[1,end,end]
+        # Radial endpoints of the duplicated periodic ray.
+        newField[1, 1] = periodicBoundary[1]
+        newField[end, 1] = periodicBoundary[1]
+        newField[1, end] = periodicBoundary[end]
+        newField[end, end] = periodicBoundary[end]
 
 
     else
@@ -739,13 +838,26 @@ function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
             average /= Float64(ny+2)
             avNewField[:,iz] .= average
         end
-        #@show size(avNewField)
         diffNewField = newField .- avNewField
-        #Création de diffpfield 
-        newField=reshape(newField,(ny+2)*(nz+2))
-        avNewField=reshape(avNewField,(ny+2)*(nz+2))
-        diffNewField=reshape(diffNewField,(ny+2)*(nz+2))
-        return (field=newField, avField=avNewField, diffField=diffNewField, Xnode=Xnode, Ynode=Ynode, rcmb=rcmb)
+        fieldMatrix = copy(newField)
+        avFieldMatrix = copy(avNewField)
+        diffFieldMatrix = copy(diffNewField)
+        newField = vec(newField)
+        avNewField = vec(avNewField)
+        diffNewField = vec(diffNewField)
+        return (
+            field=newField,
+            avField=avNewField,
+            diffField=diffNewField,
+            fieldMatrix=fieldMatrix,
+            avFieldMatrix=avFieldMatrix,
+            diffFieldMatrix=diffFieldMatrix,
+            angleNodes=phi_new,
+            radiusNodes=r_new,
+            Xnode=Xnode,
+            Ynode=Ynode,
+            rcmb=rcmb,
+        )
     else
         newField=reshape(newField,(nx+2)*(ny+2)*(nz+2))
         return (field=newField, Xnode=Xnode, Ynode=Ynode, Znode=Znode, rcmb=rcmb)
@@ -755,6 +867,219 @@ function readStagYYFilesAverage(file;rotationAngles=(θshift=0.0, ϕshift=0.0))
 end
 
 
+
+"""
+    makeZOverALayers(; icb_radius, cmb_radius, surface_radius,
+                      inner_core=0.466, outer_core=0.466, mantle=0.496)
+
+Create a validated three-layer radial `Z/A` model. Radii are in metres.
+The returned layer description can be replaced by any tuple of named tuples
+with fields `name`, `max_radius`, and `z_over_a`.
+"""
+function makeZOverALayers(;
+    icb_radius=1_221_000.5,
+    cmb_radius=3_480_000.0,
+    surface_radius=6_400_000.0,
+    inner_core=0.466,
+    outer_core=0.466,
+    mantle=0.496,
+)
+    0 < icb_radius < cmb_radius < surface_radius || throw(ArgumentError(
+        "layer radii must satisfy 0 < icb_radius < cmb_radius < surface_radius",
+    ))
+    return (
+        (name=:inner_core, max_radius=Float64(icb_radius), z_over_a=Float64(inner_core)),
+        (name=:outer_core, max_radius=Float64(cmb_radius), z_over_a=Float64(outer_core)),
+        (name=:mantle, max_radius=Float64(surface_radius), z_over_a=Float64(mantle)),
+    )
+end
+
+"""
+    layeredZOverA(radius; layers, water_fraction=nothing,
+                  water_z_over_a=5/9, material_mask=nothing, outside=0)
+
+Map point-wise radii to a dry layered `Z/A` model and optionally mix in a
+water fraction. `layers` is an ordered tuple of `(name, max_radius, z_over_a)`
+named tuples. Water fractions are clamped to `[0,1]`. Points outside all layers
+or outside `material_mask` receive `outside`.
+"""
+function layeredZOverA(
+    radius::AbstractArray{<:Real};
+    layers=makeZOverALayers(),
+    water_fraction=nothing,
+    water_z_over_a=5 / 9,
+    material_mask=nothing,
+    outside=0.0,
+)
+    isempty(layers) && throw(ArgumentError("layers cannot be empty"))
+    layerRadii = Float64[layer.max_radius for layer in layers]
+    issorted(layerRadii) || throw(ArgumentError("layer max_radius values must be sorted"))
+    all(diff(layerRadii) .> 0) || throw(ArgumentError("layer radii must be unique"))
+
+    dry = fill(Float64(outside), size(radius))
+    previousRadius = 0.0
+    for layer in layers
+        selection = (previousRadius .<= radius) .& (radius .< layer.max_radius)
+        dry[selection] .= layer.z_over_a
+        previousRadius = layer.max_radius
+    end
+    # Include the exact outer boundary in the final layer.
+    dry[radius .== layerRadii[end]] .= layers[end].z_over_a
+
+    mask = material_mask === nothing ? trues(size(radius)) : material_mask
+    size(mask) == size(radius) || throw(DimensionMismatch(
+        "material_mask and radius must have the same size",
+    ))
+    dry[.!mask] .= outside
+
+    if water_fraction === nothing
+        return (mixed=dry, dry=dry, water_fraction=nothing)
+    end
+    size(water_fraction) == size(radius) || throw(DimensionMismatch(
+        "water_fraction and radius must have the same size",
+    ))
+    water = clamp.(Float64.(water_fraction), 0.0, 1.0)
+    mixed = @. water * water_z_over_a + (1 - water) * dry
+    mixed[.!mask] .= outside
+    return (mixed=mixed, dry=dry, water_fraction=water)
+end
+
+"""
+    electronDensity(ρ, z_over_a; scale=1)
+
+Compute the electron-density proxy `nₑ = scale * ρ * Z/A` point-wise. With
+`ρ` in g/cm³ and the default `scale=1`, the result is `ρ Z/A`. Use
+`scale=6.02214076e23` to obtain electrons/cm³.
+"""
+function electronDensity(ρ::AbstractArray, z_over_a::AbstractArray; scale=1.0)
+    size(ρ) == size(z_over_a) || throw(DimensionMismatch(
+        "ρ and z_over_a must have the same size",
+    ))
+    return @. scale * ρ * z_over_a
+end
+
+"""
+    radialAverageAnomaly(field, effective_radii; bin_width,
+                         mask=nothing, minimum_radius=0, outside=NaN)
+
+Average `field` in radial bins defined on `effective_radii`, then return the
+point-wise radial mean and anomaly `field - radial_mean`. Only points selected
+by `mask` contribute. The implementation is O(number of points + bins).
+"""
+function radialAverageAnomaly(
+    field::AbstractArray{<:Real},
+    effective_radii::AbstractArray{<:Real};
+    bin_width,
+    mask=nothing,
+    minimum_radius=0.0,
+    outside=NaN,
+)
+    size(field) == size(effective_radii) || throw(DimensionMismatch(
+        "field and effective_radii must have the same size",
+    ))
+    bin_width > 0 || throw(ArgumentError("bin_width must be positive"))
+    selected = mask === nothing ? trues(size(field)) : mask
+    size(selected) == size(field) || throw(DimensionMismatch(
+        "mask and field must have the same size",
+    ))
+    any(selected) || throw(ArgumentError("mask does not select any points"))
+
+    maximumRadius = maximum(effective_radii[selected])
+    numberBins = max(1, floor(Int, (maximumRadius - minimum_radius) / bin_width) + 1)
+    sums = zeros(Float64, numberBins)
+    counts = zeros(Int, numberBins)
+
+    for index in eachindex(field, effective_radii, selected)
+        selected[index] || continue
+        value = field[index]
+        isfinite(value) || continue
+        bin = clamp(
+            floor(Int, (effective_radii[index] - minimum_radius) / bin_width) + 1,
+            1,
+            numberBins,
+        )
+        sums[bin] += value
+        counts[bin] += 1
+    end
+
+    radialMean = fill(Float64(outside), size(field))
+    anomaly = fill(Float64(outside), size(field))
+    meanByBin = fill(NaN, numberBins)
+    populated = counts .> 0
+    meanByBin[populated] .= sums[populated] ./ counts[populated]
+
+    for index in eachindex(field, effective_radii, selected)
+        selected[index] || continue
+        bin = clamp(
+            floor(Int, (effective_radii[index] - minimum_radius) / bin_width) + 1,
+            1,
+            numberBins,
+        )
+        isfinite(meanByBin[bin]) || continue
+        radialMean[index] = meanByBin[bin]
+        anomaly[index] = field[index] - meanByBin[bin]
+    end
+
+    binCentres = minimum_radius .+ ((1:numberBins) .- 0.5) .* bin_width
+    return (;
+        radial_mean=radialMean,
+        anomaly,
+        bin_centres=binCentres,
+        mean_by_bin=meanByBin,
+        counts,
+    )
+end
+
+"""
+    getZOverAField(water_file, Xquery, Yquery, radius; layers, ...)
+
+Read and transform a StagYY water field with the same periodic polar and radial
+mapping used for density, then combine it with a layered dry `Z/A` model.
+`water_scale` converts the stored water quantity to a 0--1 fraction.
+"""
+function getZOverAField(
+    water_file,
+    Xquery::AbstractMatrix{<:Real},
+    Yquery::AbstractMatrix{<:Real},
+    radius::AbstractMatrix{<:Real};
+    layers=makeZOverALayers(),
+    water_scale=1.0,
+    water_z_over_a=5 / 9,
+    material_mask=nothing,
+    water_mask=nothing,
+    outside=0.0,
+    interpolation_kwargs...,
+)
+    size(Xquery) == size(Yquery) == size(radius) || throw(DimensionMismatch(
+        "Xquery, Yquery, and radius must have the same size",
+    ))
+    waterCartesian = getCartesianField(
+        water_file,
+        Xquery,
+        Yquery;
+        interpolation_kwargs...,
+    )
+    waterFraction = water_scale .* waterCartesian.field
+    if water_mask !== nothing
+        size(water_mask) == size(radius) || throw(DimensionMismatch(
+            "water_mask and radius must have the same size",
+        ))
+        waterFraction = copy(waterFraction)
+        waterFraction[.!water_mask] .= 0.0
+    end
+    result = layeredZOverA(
+        radius;
+        layers=layers,
+        water_fraction=waterFraction,
+        water_z_over_a=water_z_over_a,
+        material_mask=material_mask,
+        outside=outside,
+    )
+    return (;
+        result...,
+        waterCartesian=waterCartesian,
+    )
+end
 
 function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iCheckCoreModel=true)
     # local function here: this requires planet1D.jl

@@ -25,6 +25,8 @@ module commonBatchs
     # batchStagYY
     export myListDir,readStagYYFiles,readStagYYFilesAverage
     export quarterDiskExtrapolationRawGrid!, quarterDiskExtrapolation
+    export makeZOverALayers, layeredZOverA, getZOverAField
+    export electronDensity, radialAverageAnomaly
     # symbolify
     export x,y,z,t
     export ∂x,∂y,∂z,∂t
