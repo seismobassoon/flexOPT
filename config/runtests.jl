@@ -1,7 +1,5 @@
 using Test,BenchmarkTools,CairoMakie
 
-ParamFile = "../config/testparam.csv"
-
 include("../src/planet1D.jl")
 using .planet1D
 

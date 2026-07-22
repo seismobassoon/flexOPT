@@ -688,13 +688,13 @@ end
 
 
 function extendToCoreWithρ!(ρfield, Xnode, Ynode, rcmb, dR; dθ=2*π/360.0, iCheckCoreModel=true)
-    # local function here: this requires planet1D.jl, testparam.csv
+    # local function here: this requires planet1D.jl
     #
     # This function will add the ρ field computed only for the core 
 
     # Xnode and Ynodes are the one that we give but 
 
-    # the 1D core model will be given by specifying the file to use in testparam.csv 
+    # the 1D core model is selected through planet1D.getSet1Dmodel!
 
 
     premCMB = planet1D.my1DDSMmodel.averagedPlanetCMBInKilometer * 1.e3

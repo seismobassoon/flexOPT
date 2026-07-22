@@ -21,6 +21,7 @@ module planet1D
     include("planet1D/mainStructures.jl")
     export compute1DseismicParamtersFromPolynomialCoefficients
     include("planet1D/inputParams.jl")
+    export configure_input!, input, dsm1Dconfig
 
     include("planet1D/inputModels.jl")
     export getSet1Dmodel!,DEFAULT_1D_MODEL

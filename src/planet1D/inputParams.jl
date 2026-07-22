@@ -1,156 +1,74 @@
-using YAML,StructTypes,CSV,DataFrames,Unitful
+using YAML, StructTypes
 
-@doc raw"""
-    planet1Dconfig
+"""Runtime parameters for `planet1D`.
 
-    This structure contains the parameters used in the planet1D code. 
-    The parameters are read from a file called planet1Dconfig.txt. 
-    If the file is not found, the default values are used. 
-    The file must be in the same directory as the planet1D executable.
-
-    planet1Dconfig.re: relative error (see GT95 eq. 6.2: you can control the quality of synthetics)
-    planet1Dconfig.ratc: ampratio using in grid cut-off (1.d-10 is recommended)
-    planet1Dconfig.ratl: ampratio using in l-cutoff
-    planet1Dconfig.omegaiTlen: wrap-around attenuation for omegaiTlen (usually 1.d-2 is used)
-    planet1Dconfig.maxlmax: maximum lmax
-
-    Example of file:
-    re = 1.e-2
-    ratc = 1.e-10
-    ratl = 1.e-5
-    omegaiTlen = 1.e-2
-    maxlmax = 80000
-
-    initial values in case the variables are not found
+The module is self-contained: loading it no longer requires a `Main.ParamFile`.
+Call [`configure_input!`](@ref) to change frequency or time-window parameters.
 """
-input=Input()
-metaInfo=MetaInfo()
-dsm1Dconfig=planet1Dconfig()
+input = Input()
+metaInfo = MetaInfo()
+dsm1Dconfig = planet1Dconfig()
 
-try 
-    data = YAML.load_file(dirname(@__FILE__) *"/../../dataInput/config.yaml"; dicttype=Dict{Symbol, Any})
-    test_dict = data[:classicDSM][1]
-    StructTypes.StructType(::Type{MetaInfo}) = StructTypes.Mutable()
-    global metaInfo = StructTypes.constructfrom(MetaInfo, test_dict)
-catch
-    @error("planet1D configuration file not found or not readable", dirname(@__FILE__) *"/../../dataInput/config.yaml")
+StructTypes.StructType(::Type{MetaInfo}) = StructTypes.Mutable()
+StructTypes.StructType(::Type{planet1Dconfig}) = StructTypes.Mutable()
+
+function _load_dsm_config()
+    metadata_path = normpath(joinpath(@__DIR__, "../../dataInput/config.yaml"))
+    isfile(metadata_path) || return metaInfo, dsm1Dconfig
+
+    metadata = YAML.load_file(metadata_path; dicttype=Dict{Symbol,Any})
+    metadata_values = metadata[:classicDSM][1]
+    loaded_meta = StructTypes.constructfrom(MetaInfo, metadata_values)
+
+    config_path = normpath(joinpath(@__DIR__, "..", loaded_meta.planet1DconfigFile))
+    isfile(config_path) || return loaded_meta, dsm1Dconfig
+    config = YAML.load_file(config_path; dicttype=Dict{Symbol,Any})
+    return loaded_meta, StructTypes.constructfrom(planet1Dconfig, config[:global][1])
 end
 
-try 
-    data = YAML.load_file(dirname(@__FILE__) *"/../"* metaInfo.planet1DconfigFile; dicttype=Dict{Symbol, Any})
-    test_dict = data[:global][1]
-    StructTypes.StructType(::Type{planet1Dconfig}) = StructTypes.Mutable()
-    global dsm1Dconfig = StructTypes.constructfrom(planet1Dconfig, test_dict)
-catch
-    @warn("planet1D configuration file not found")
-    # see mainStructures.jl for the default values
-    dsm1Dconfig.re = 1.e-2
-    dsm1Dconfig.ratc = 1.e-10
-    dsm1Dconfig.ratl = 1.e-5
-    dsm1Dconfig.omegaiTlen = 1.e-2
-    dsm1Dconfig.maxlmax = 80000
-    dsm1Dconfig.傾き許容度 = 2.0
-    dsm1Dconfig.eps = 1.5e-3
-    global dsm1Dconfig.modelFolder = "../../dataInput/models"
+metaInfo, dsm1Dconfig = _load_dsm_config()
+
+"""
+    configure_input!(; averagedPlanetRadius=0, timeWindow=nothing,
+                       timeWindowMinimum=nothing, maxFrequencyMin=2,
+                       minFrequencyMax=0, GUIoption=false)
+
+Configure the global `planet1D.input` without relying on a CSV parameter file.
+Frequencies are expressed in Hz and time windows in seconds. If only
+`timeWindowMinimum` is supplied, the window is rounded up to `0.1 * 2^n`.
+"""
+function configure_input!(; averagedPlanetRadius::Real=0.0,
+                          timeWindow::Union{Nothing,Real}=nothing,
+                          timeWindowMinimum::Union{Nothing,Real}=nothing,
+                          maxFrequencyMin::Real=2.0,
+                          minFrequencyMax::Real=0.0,
+                          GUIoption::Bool=false)
+    maxFrequencyMin > 0 || throw(ArgumentError("maxFrequencyMin must be positive"))
+    minFrequencyMax >= 0 || throw(ArgumentError("minFrequencyMax must be non-negative"))
+
+    selected_window = if timeWindow !== nothing
+        Float64(timeWindow)
+    elseif timeWindowMinimum !== nothing
+        minimum_window = Float64(timeWindowMinimum)
+        minimum_window > 0 || throw(ArgumentError("timeWindowMinimum must be positive"))
+        0.1 * 2.0^ceil(Int, log2(minimum_window / 0.1))
+    else
+        3276.8
+    end
+    selected_window > 0 || throw(ArgumentError("timeWindow must be positive"))
+
+    i_end = 2^floor(Int, log2(Float64(maxFrequencyMin) * selected_window))
+    i_start = minFrequencyMax > 0 ?
+        2^floor(Int, log2(Float64(minFrequencyMax) * selected_window)) : 1
+    i_start <= i_end || throw(ArgumentError("minFrequencyMax must not exceed maxFrequencyMin"))
+
+    input.averagedPlanetRadius = Float64(averagedPlanetRadius)
+    input.timeWindow = selected_window
+    input.ωᵢ = -log(dsm1Dconfig.omegaiTlen) / selected_window
+    dω = 2π / selected_window
+    input.ωᵣ = collect(range(dω * i_start; step=dω, length=i_end - i_start + 1))
+    input.GUIoption = GUIoption
+    return input
 end
 
-
-
-try 
-    paramFile= dirname(@__FILE__) *"/../"*Main.ParamFile
-    data = CSV.read(paramFile,DataFrame; header=false, comment="#")
-    dic=Dict(Pair.(data.Column1, data.Column2))
-    # input.modelFile=strip(dic["modelFile"]) # we get this differently now!
-    if haskey(dic,"averagedPlanetRadius")
-        input.averagedPlanetRadius=uparse(strip(dic["averagedPlanetRadius"]))
-    else
-        input.averagedPlanetRadius=0.e0
-    end
-
-   
-
-
-    if haskey(dic, "timeWindowMinimum")
-        timeWindowMinimum=uparse(strip(dic["timeWindowMinimum"]))
-    else
-        timeWindowMinimum=0.e0
-    end
-    
-    
-    if haskey(dic, "timeWindow")
-        input.timeWindow=uparse(strip(dic["timeWindow"]))
-    else
-        input.timeWindow=0.e0
-    end
-
-
-    if timeWindowMinimum == 0.e0 && input.timeWindow == 0.e0
-        input.timeWindow=3276.8e0
-    else
-        if input.timeWindow==0.e0
-            tw=1.e-1
-            while tw < timeWindowMinimum
-                tw*=2.e0
-            end
-            input.timeWindow=tw
-        end
-    end
-   
-    input.ωᵢ=-log(dsm1Dconfig.omegaiTlen)/input.timeWindow
-
-    if haskey(dic, "maxFrequencyMin")
-        maxFrequencyMin=uparse(strip(dic["maxFrequencyMin"]))
-    else
-        @error("maxFrequencyMin not found in ParamFile $paramFile")
-    end
-
-    if haskey(dic, "minFrequencyMax")
-        minFrequencyMax=uparse(strip(dic["minFrequencyMax"]))
-    else
-        minFrequencyMax=0.e0
-    end
-
-    # here we compute the angular frequency array
-
-    dω=2.e0*π/input.timeWindow
-    iEnd=2^trunc(Int64,log(maxFrequencyMin*input.timeWindow)/log(2.e0))
-    if minFrequencyMax>0.e0
-        2^trunc(Int64,log(minFrequencyMax*input.timeWindow)/log(2.e0))
-    else
-        iStart=1
-    end
-    input.ωᵣ=range(dω*iStart,stop=dω*iEnd,length=iEnd-iStart+1)
-    
-
-    if haskey(dic, "maxFrequencyMin")
-        maxFrequencyMin=uparse(strip(dic["maxFrequencyMin"]))
-    else
-        @error("maxFrequencyMin not found in ParamFile $paramFile")
-    end
-
-    if haskey(dic, "minFrequencyMax")
-        minFrequencyMax=uparse(strip(dic["minFrequencyMax"]))
-    else
-        minFrequencyMax=0.e0
-    end
-
-    # here we compute the angular frequency array
-
-
-
-    if haskey(dic,"GUIoption")
-        
-        if strip(dic["GUIoption"])=="on"
-            input.GUIoption=true
-        else
-            input.GUIoption=false
-        end
-    else
-        input.GUIoption=false
-    end
-catch
-    @error("ParamFile file not found or not readable", dirname(@__FILE__) *"/../"*Main.ParamFile)
-end
-
-
-
+configure_input!()

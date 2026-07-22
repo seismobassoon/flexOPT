@@ -2,7 +2,7 @@
 #PREM version of everything
 
 function extendWithρ!(ρfield, Xnode, Ynode, dR;rcmb=6.371e6, dθ=2*π/360.0, iCheckCoreModel=true)
-    # local function here: this requires planet1D.jl, testparam.csv
+    # local function here: this requires planet1D.jl
 
     premCMB = planet1D.my1DDSMmodel.averagedPlanetCMBInKilometer * 1.e3
 
@@ -306,5 +306,4 @@ function linkWithNeurthinoPREM()
 
     return probs2
 end
-
 

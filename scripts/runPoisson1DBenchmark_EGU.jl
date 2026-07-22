@@ -13,7 +13,6 @@ using Symbolics,CairoMakie,LinearAlgebra
 using JLD2, LinearAlgebra
 cd(@__DIR__)
 Pkg.activate("../")
-ParamFile = "../config/testparam.csv"  # maybe GeoPoints and planet1D should be fusioned
 
 # batchGPU should be at this level (I have not made it as a module yet, since the choice of Metal/CUDA should be done in a manual way)
 include("../src/batchFiles/batchGPU.jl")

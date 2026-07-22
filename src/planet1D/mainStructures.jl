@@ -14,14 +14,24 @@ mutable struct Input
     ωᵢ::Float64
     ωᵣ::Array{Float64,1}
     GUIoption::Bool
-    Input() = new()
+    Input(; modelFile::String="earth/PREM.psv.model",
+          averagedPlanetRadius::Real=0.0,
+          timeWindow::Real=3276.8,
+          ωᵢ::Real=0.0,
+          ωᵣ::AbstractVector{<:Real}=Float64[],
+          GUIoption::Bool=false) =
+        new(modelFile, Float64(averagedPlanetRadius), Float64(timeWindow),
+            Float64(ωᵢ), Float64.(ωᵣ), GUIoption)
 end
 
 mutable struct MetaInfo 
     name::String
     info::String
     planet1DconfigFile::String
-    MetaInfo() = new()
+    MetaInfo(; name::String="1D DSM",
+             info::String="classical DSM with linear spline and spherical harmonics",
+             planet1DconfigFile::String="../dataInput/DSMconfig.yaml") =
+        new(name, info, planet1DconfigFile)
 end
 
 mutable struct planet1Dconfig 
@@ -34,7 +44,12 @@ mutable struct planet1Dconfig
     modelFolder::String
     傾き許容度::Float64 # tolerance for the slope change to be considered for a fusion
     eps::Float64 # tolerance for the error in interpolation
-    planet1Dconfig() = new()
+    planet1Dconfig(; re::Real=1e-2, ratc::Real=1e-10, ratl::Real=1e-5,
+                   omegaiTlen::Real=1e-2, maxlmax::Integer=80000,
+                   modelFolder::String="../dataInput/model",
+                   傾き許容度::Real=2.0, eps::Real=1.5e-3) =
+        new(Float64(re), Float64(ratc), Float64(ratl), Float64(omegaiTlen),
+            Int64(maxlmax), modelFolder, Float64(傾き許容度), Float64(eps))
 end
 
 
