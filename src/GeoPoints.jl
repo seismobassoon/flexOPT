@@ -29,12 +29,14 @@ module GeoPoints
 
 
     # functions GeoPoints
+    export realToVirtualEarthCoords
     export DEFAULT_PLANET,DEFAULT_ELLIPSOID, planet_ellipsoid, set_default_planet!, localCoord2D, localCoord3D
     export p_ECEF_to_local, p_local_to_ECEF, p_ECEF_to_local2D
     export GeoPoint, +, -, /, *
     export GeoPointSet,GeoPoints_to_local
     export rotation_between_geopoints, transform_geopoints
     export theta_phi_shift, effective_cartesian_coordinates
+    export PathProfile2D, creationPaths
     #export effectiveRadius, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors, makeLocalCoordinateUnitVectors
     export constructLocalBox
     export getParamsAndTopo,getParamsWithoutTopo #, interpolate_params, GMTprecision

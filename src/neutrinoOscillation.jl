@@ -1,6 +1,6 @@
 
 
-module Neurthino
+module neutrinoOscillation
 
     using LinearAlgebra
     using SparseArrays
@@ -45,7 +45,7 @@ module Neurthino
     
 
 
-    
+    export roundExt
     export N_A, G_F
     export oscprob
     export set_default_flavour!, U, H

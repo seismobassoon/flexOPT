@@ -879,7 +879,7 @@ with fields `name`, `max_radius`, and `z_over_a`.
 function makeZOverALayers(;
     icb_radius=1_221_000.5,
     cmb_radius=3_480_000.0,
-    surface_radius=6_400_000.0,
+    surface_radius=6_400_000.0,# this can be bigger than the real radius (since ρ will be zero)
     inner_core=0.466,
     outer_core=0.466,
     mantle=0.496,

@@ -545,6 +545,35 @@ function theta_phi_shift(R, p1::GeoPoint)
     )
 end
 
+
+function realToVirtualEarthCoords(
+    points::AbstractArray{<:GeoPoint},
+    p1::GeoPoint,
+    p2::GeoPoint,
+    ;
+    source_planet::Symbol=:Earth,
+    target_planet::Symbol=:SphericalEarth,
+    plane::Symbol=:xz,
+)
+    convertedGrids, rotationAngles = transform_geopoints(
+        points,
+        p1,
+        p2;
+        source_planet=source_planet,
+        target_planet=target_planet,
+    )
+
+    effectiveCoords = effective_cartesian_coordinates(
+        points,
+        p1,
+        p2;
+        source_planet=source_planet,
+        target_planet=target_planet,
+        plane=plane,
+    )
+
+    return (convertedGrids=convertedGrids, rotationAngles=rotationAngles, effectiveCoords=effectiveCoords)
+end
 """
     transform_geopoints(points, p1, p2;
         source_planet=:Earth, target_planet=:SphericalEarth)
@@ -695,4 +724,263 @@ function GeoPoints_to_local(points::AbstractVector{GeoPoint}, boxGrids3D)
         p_ECEF_to_local(p.ecef, pOrigin, R)
         for p in points
     ]
+end
+
+"""
+    PathProfile2D
+
+A field profile sampled along one 2D source-to-detector ray.
+
+`values` contains the field average in each segment, `baselines` contains the
+corresponding segment lengths in kilometres, and all coordinates are in
+metres. The ordering is always source → detector.
+"""
+struct PathProfile2D
+    cosθ::Float64
+    values::Vector{Float64}
+    baselines::Vector{Float64}
+    source::SVector{2,Float64}
+    detector::SVector{2,Float64}
+    segment_midpoints::Vector{SVector{2,Float64}}
+end
+
+function _positive_distance_to_box(
+    point::SVector{2,Float64},
+    direction::SVector{2,Float64},
+    xlimits,
+    ylimits,
+)
+    distances = Float64[]
+    for (coordinate, component, limits) in zip(point, direction, (xlimits, ylimits))
+        if component > 0
+            push!(distances, (limits[2] - coordinate) / component)
+        elseif component < 0
+            push!(distances, (limits[1] - coordinate) / component)
+        end
+    end
+    positive = filter(>(0.0), distances)
+    isempty(positive) &&
+        throw(ArgumentError("ray from detector does not enter the coordinate box"))
+    return minimum(positive)
+end
+
+function _surface_distance(
+    inside_interpolator,
+    detector::SVector{2,Float64},
+    direction::SVector{2,Float64},
+    maximum_distance::Float64,
+    search_step::Float64,
+    tolerance::Float64,
+)
+    inside_interpolator(detector...) >= 0.5 ||
+        throw(ArgumentError("detector must be inside material_mask"))
+
+    lower = 0.0
+    upper = min(search_step, maximum_distance)
+    while upper < maximum_distance &&
+          inside_interpolator((detector + upper * direction)...) >= 0.5
+        lower = upper
+        upper = min(upper + search_step, maximum_distance)
+    end
+
+    inside_interpolator((detector + upper * direction)...) < 0.5 ||
+        throw(ArgumentError(
+            "ray did not leave material_mask before reaching the interpolation grid boundary",
+        ))
+
+    while upper - lower > tolerance
+        middle = (lower + upper) / 2
+        if inside_interpolator((detector + middle * direction)...) >= 0.5
+            lower = middle
+        else
+            upper = middle
+        end
+    end
+    return (lower + upper) / 2
+end
+
+"""
+    creationPaths(field, x, z, detectorLocal, cosθgrid;
+        Δbaseline, material_mask, modifiedLongitude2Disk=0.0,
+        center=(0.0, 0.0), boundary_search_step=nothing,
+        boundary_tolerance=1.0, path_constructor=nothing)
+
+Sample a regular 2D Cartesian field along incoming neutrino rays. `x`, `z`,
+`detectorLocal`, `center`, and `Δbaseline` use metres. Segment baselines are
+returned in kilometres for neutrino-oscillation routines.
+
+The ray for `cosθ=-1` crosses the diameter. `cosθ=0` follows the
+counter-clockwise tangent used by the original `creationPaths`. A detector
+constructed with longitude 180° is the mirror of longitude 0° and therefore
+selects the opposite half-disk.
+
+The topographic source is found from the first transition out of
+`material_mask` along the detector-to-source ray. Field averages use
+three-point Gauss-Legendre quadrature. Profiles are stored in the physically
+important source → detector order.
+
+When `path_constructor` is supplied, it is called as
+`path_constructor(profile.values, profile.baselines)` for every angle. This
+lets callers construct `Neurthino.Path` objects without coupling GeoPoints to
+the neutrino module.
+"""
+function creationPaths(
+    field::AbstractMatrix,
+    x_coordinates::AbstractVector,
+    z_coordinates::AbstractVector,
+    detectorLocal,
+    cosθgrid;
+    Δbaseline::Real,
+    material_mask::AbstractMatrix,
+    modifiedLongitude2Disk::Real=0.0,
+    center=(0.0, 0.0),
+    boundary_search_step=nothing,
+    boundary_tolerance::Real=1.0,
+    path_constructor=nothing,
+)
+    x = Float64.(collect(x_coordinates))
+    z = Float64.(collect(z_coordinates))
+    size(field) == (length(x), length(z)) ||
+        throw(DimensionMismatch(
+            "field size $(size(field)) must equal (length(x), length(z)) = " *
+            "$((length(x), length(z)))",
+        ))
+    size(material_mask) == size(field) ||
+        throw(DimensionMismatch("material_mask must have the same size as field"))
+    all(diff(x) .> 0) || throw(ArgumentError("x coordinates must be strictly increasing"))
+    all(diff(z) .> 0) || throw(ArgumentError("z coordinates must be strictly increasing"))
+    Δbaseline > 0 || throw(ArgumentError("Δbaseline must be positive"))
+    boundary_tolerance > 0 ||
+        throw(ArgumentError("boundary_tolerance must be positive"))
+
+    longitude = mod(Float64(modifiedLongitude2Disk), 360.0)
+    (isapprox(longitude, 0.0; atol=1e-8) ||
+     isapprox(longitude, 180.0; atol=1e-8)) ||
+        throw(ArgumentError("modifiedLongitude2Disk must be 0° or 180°"))
+
+    detector = SVector{2,Float64}(detectorLocal)
+    origin = SVector{2,Float64}(center)
+    radial = detector - origin
+    norm(radial) > 0 || throw(ArgumentError("detectorLocal cannot equal center"))
+
+    expected_x_sign = isapprox(longitude, 0.0; atol=1e-8) ? 1 : -1
+    radial_x_tolerance = sqrt(eps(Float64)) * norm(radial)
+    if abs(radial[1]) > radial_x_tolerance &&
+       sign(radial[1]) != expected_x_sign
+        throw(ArgumentError(
+            "detectorLocal is inconsistent with modifiedLongitude2Disk=" *
+            "$(modifiedLongitude2Disk)°",
+        ))
+    end
+
+    radial_unit = radial / norm(radial)
+    tangent_unit = SVector(-radial_unit[2], radial_unit[1])
+    cosines = Float64.(collect(cosθgrid))
+    all(-1.0 .<= cosines .<= 0.0) ||
+        throw(ArgumentError("cosθgrid values must lie in [-1, 0]"))
+
+    field_interpolator = LinearInterpolation(
+        (x, z),
+        Float64.(field);
+        extrapolation_bc=Flat(),
+    )
+    inside_interpolator = LinearInterpolation(
+        (x, z),
+        Float64.(material_mask);
+        extrapolation_bc=0.0,
+    )
+
+    grid_step = min(minimum(diff(x)), minimum(diff(z)))
+    search_step = isnothing(boundary_search_step) ?
+                  grid_step / 2 :
+                  Float64(boundary_search_step)
+    search_step > 0 ||
+        throw(ArgumentError("boundary_search_step must be positive"))
+
+    profiles = Vector{PathProfile2D}(undef, length(cosines))
+    Threads.@threads for angle_index in eachindex(cosines)
+        cosine = cosines[angle_index]
+        direction = cosine * radial_unit +
+                    sqrt(max(0.0, 1 - cosine^2)) * tangent_unit
+        maximum_distance = _positive_distance_to_box(
+            detector,
+            direction,
+            extrema(x),
+            extrema(z),
+        )
+        path_length = _surface_distance(
+            inside_interpolator,
+            detector,
+            direction,
+            maximum_distance,
+            search_step,
+            Float64(boundary_tolerance),
+        )
+        source = detector + path_length * direction
+
+        number_segments = max(1, ceil(Int, path_length / Δbaseline))
+        edges = collect(range(0.0, path_length; length=number_segments + 1))
+        baselines = diff(edges) .* 1e-3
+        values = Vector{Float64}(undef, number_segments)
+        midpoints = Vector{SVector{2,Float64}}(undef, number_segments)
+
+        # Three-point Gauss-Legendre rule, normalized for a segment average.
+        quadrature_nodes = (-sqrt(3 / 5), 0.0, sqrt(3 / 5))
+        quadrature_weights = (5 / 18, 4 / 9, 5 / 18)
+        source_to_detector = -direction
+        for segment_index in eachindex(values)
+            left = edges[segment_index]
+            right = edges[segment_index + 1]
+            middle = (left + right) / 2
+            half_width = (right - left) / 2
+            midpoints[segment_index] = source + middle * source_to_detector
+            values[segment_index] = sum(
+                weight * field_interpolator(
+                    (source + (middle + half_width * node) * source_to_detector)...,
+                )
+                for (node, weight) in zip(quadrature_nodes, quadrature_weights)
+            )
+        end
+
+        profiles[angle_index] = PathProfile2D(
+            cosine,
+            values,
+            baselines,
+            source,
+            detector,
+            midpoints,
+        )
+    end
+
+    paths = isnothing(path_constructor) ?
+            nothing :
+            [path_constructor(profile.values, profile.baselines) for profile in profiles]
+    return (;
+        cosθgrid=cosines,
+        profiles,
+        paths,
+        detector,
+        center=origin,
+        modifiedLongitude2Disk=longitude,
+    )
+end
+
+function creationPaths(
+    field::AbstractMatrix,
+    x_coordinates::AbstractVector,
+    z_coordinates::AbstractVector,
+    detectorLocal,
+    binning::NamedTuple;
+    kwargs...,
+)
+    hasproperty(binning, :cosθgrid) ||
+        throw(ArgumentError("binning must contain cosθgrid"))
+    return creationPaths(
+        field,
+        x_coordinates,
+        z_coordinates,
+        detectorLocal,
+        binning.cosθgrid;
+        kwargs...,
+    )
 end
