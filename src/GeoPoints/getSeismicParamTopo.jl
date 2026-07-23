@@ -134,8 +134,6 @@ function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Floa
     #seismicModel=(ρ=zeros(Float64,size(allGridsInGeoPoints)...),Vpv=zeros(Float64,size(allGridsInGeoPoints)...),Vph=zeros(Float64,size(allGridsInGeoPoints)...),Vsv=zeros(Float64,size(allGridsInGeoPoints)...),Vsh=zeros(Float64,size(allGridsInGeoPoints)...),Qμ=zeros(Float64,size(allGridsInGeoPoints)...),Qκ=zeros(Float64,size(allGridsInGeoPoints)...),QμPower=zeros(Float64,size(allGridsInGeoPoints)...),QκPower=zeros(Float64,size(allGridsInGeoPoints)...),η=zeros(Float64,size(allGridsInGeoPoints)...))
 
 
-    seismicModel = initiateSeismicModel(allGridsInGeoPoints)
-
     # get the extremeties in radius
 
     
@@ -204,34 +202,26 @@ function getParamsAndTopo(allGridsInGeoPoints,effectiveRadii,precisionInKm::Floa
 
     
 
-    for i in CartesianIndices(allGridsInGeoPoints)
+    # Cache the topography because it is also needed after the radial
+    # interpolation. Each threaded iteration reads and writes distinct cells.
+    topography = similar(effectiveRadii, Float64)
+    Threads.@threads for i in eachindex(allGridsInGeoPoints, effectiveRadii, topography)
         tmpPoint = allGridsInGeoPoints[i]
-        if 0.0 < tmpPoint.alt <= topoInterpolater(tmpPoint.lon,tmpPoint.lat) 
+        topographyHere = topoInterpolater(tmpPoint.lon, tmpPoint.lat)
+        topography[i] = topographyHere
+
+        if 0.0 < tmpPoint.alt <= topographyHere
             # it might be very time-consuming if we do this for 3D Cartesian points ...
             effectiveRadii[i]=planet1D.my1DDSMmodel.averagedPlanetRadiusInKilometer*1.e3 - eps
      
         end
-
-
-        # NF needs to give topography file
-
-        if hasAirModel === false
-            if topoInterpolater(tmpPoint.lon,tmpPoint.lat) <tmpPoint.alt
-                seismicModel.ρ[i]=ρAir
-                seismicModel.Vpv[i]=VpAir
-                seismicModel.Vph[i]=VpAir
-                seismicModel.Vsv[i]=0.0
-                seismicModel.Vsh[i]=0.0
-            end
-        end
-
     end
 
     seismicModel = interpolate_params(params, newRadii, effectiveRadii)
 
-    for i in CartesianIndices(allGridsInGeoPoints)
+    Threads.@threads for i in eachindex(allGridsInGeoPoints, topography)
         tmpPoint = allGridsInGeoPoints[i]
-        topographyHere = topoInterpolater(tmpPoint.lon, tmpPoint.lat)
+        topographyHere = topography[i]
 
         # Reapply surface materials after interpolate_params, which creates a
         # fresh NamedTuple and would otherwise overwrite the earlier air mask.
