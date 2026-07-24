@@ -124,6 +124,12 @@ function distance2_point_to_box(p::CartesianIndex, c1::CartesianIndex, c2::Carte
 end
 
 
+function dmsToDecimal(degrees, minutes, seconds)
+    sign = degrees < 0 ? -1 : 1
+    sign * (abs(degrees) + minutes / 60 + seconds / 3600)
+end
+
+
 function myInv(a;method="LU")
     ainv=nothing
     if method==="macGPU"# this does not work for the moment

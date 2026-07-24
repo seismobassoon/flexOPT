@@ -12,7 +12,7 @@ module commonBatchs
     include("batchFiles/batchStagYY.jl")
     include("batchFiles/batchSymbolics.jl")
     include("batchFiles/batchInterpolations.jl")
-
+    export dmsToDecimal
     export SVector, @SVector
     export interpolateField,getCartesianField
     export myProduceOrLoad,lazyProduceOrLoad, @strdict, @unpack
