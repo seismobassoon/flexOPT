@@ -315,9 +315,14 @@ Calculate the transistion probabilities between the neutrino flavours
 - `anti`:                               Is anti neutrino
 
 """
-function oscprob(osc_params::OscillationParameters, energy, baseline; anti=false)  
+function oscprob(osc_params::OscillationParameters, energy, baseline; anti=false,roundU_and_H=false)  
+  
     H = Hamiltonian(osc_params)
     U = PMNSMatrix(osc_params; anti=anti)
+    if roundU_and_H
+        U = roundExt.(U, 0.01)
+        H = roundExt.(H, 0.00001)
+    end
     Pνν(U, H, energy, baseline)
 end
 
