@@ -1,80 +1,99 @@
 
 """
-    (c) Yael Deniz and Isabel Goos 2026
+    read_neutrino_flux_table(path; nEbins, nθbins, has_header=false,
+        cosθgrid=range(-1, 1, length=nθbins), energies_in_log=true)
 
-    read_neutrino_flux_table(filename::String, nEbins::Int, nθbins::Int, has_header::Bool)
+Read a legacy five-column CSV table and return a compact `NamedTuple` with
+`native` and energy-bin-centred `interpolated` tables. Flux matrices always use
+the flexOPT convention `(energy, cosθ)`.
 
-Read a neutrino flux CSV file from the `../data` directory 
-and create a neutrino flux array for each neutrino flavor and type.
-The amount of tau neutrinos and antineutrinos is negligible.
-
-# Arguments
-- `filename`: The name of the data file (without the `.csv` extension).
-- `nEbins`: The number of energy bins.
-- `nθbins`: The number of zenith angle bins.
-- `has_header`: Is true if the dataset has a header. 
-
-# Returns
-A tuple of four `nEbins` × `nθbins` Matrices representing the flux for:
-1. `νe` - Electron neutrino
-2. `νμ` - Muon neutrino
-3. `antiνe` - Electron antineutrino
-4. `antiνμ` - Muon antineutrino
+`path` may be an explicit CSV path, a filename relative to
+`dataInput/neutrinoFluxData`, or a basename without `.csv`.
 """
-
-"""
-    read_neutrino_flux_table(filename::String, nEbins::Int, nθbins::Int, has_header::Bool)
-
-Read a neutrino flux CSV file from the `../data` directory 
-and create a neutrino flux array for each neutrino flavor and type.
-The amount of tau neutrinos and antineutrinos is negligible.
-
-# Arguments
-- `filename`: The name of the data file (without the `.csv` extension).
-- `nEbins`: The number of energy bins.
-- `nθbins`: The number of zenith angle bins.
-- `has_header`: Is true if the dataset has a header. 
-
-# Returns
-A tuple of four `nEbins` × `nθbins` Matrices representing the flux for:
-1. `νe` - Electron neutrino
-2. `νμ` - Muon neutrino
-3. `antiνe` - Electron antineutrino
-4. `antiνμ` - Muon antineutrino
-"""
-function read_neutrino_flux_table(filename::String, nEbins::Int, nθbins::Int, has_header::Bool)
-
-    # construct path
-    data_dir = joinpath(@__DIR__, "..", "data")
-    csv_path = joinpath(data_dir, "$(filename).csv")
-
-    # read the data (has_header=false ensures the first row isn't taken to be the description)
-    raw_df = CSV.read(csv_path, DataFrame, header=has_header)
-
-   # ensure the number of rows matches the expected grid size
+function read_neutrino_flux_table(
+    path::AbstractString;
+    nEbins::Integer,
+    nθbins::Integer,
+    has_header::Bool=false,
+    cosθgrid=range(-1.0, 1.0, length=nθbins),
+    energies_in_log::Bool=true,
+)
+    csv_path = _resolve_neutrino_flux_csv(path)
+    raw_df = CSV.read(csv_path, DataFrame; header=has_header)
     expected_rows = nEbins * nθbins
-    if nrow(raw_df) != expected_rows
-        error("Dimension mismatch: CSV has $(nrow(raw_df)) rows, but nEbins * nθbins = $expected_rows.")
+    nrow(raw_df) == expected_rows ||
+        throw(DimensionMismatch(
+            "CSV has $(nrow(raw_df)) rows; expected $nEbins × $nθbins = $expected_rows",
+        ))
+    ncol(raw_df) == 5 ||
+        throw(DimensionMismatch(
+            "legacy neutrino-flux CSV must contain five columns; got $(ncol(raw_df))",
+        ))
+
+    flux_3d = reshape(Float64.(Matrix(raw_df)), nEbins, nθbins, 5)
+    energies = collect(flux_3d[:, 1, 1])
+    cosines = Float64.(collect(cosθgrid))
+    length(cosines) == nθbins ||
+        throw(DimensionMismatch("cosθgrid must contain $nθbins values"))
+
+    native = (
+        energies=energies,
+        cosθgrid=cosines,
+        νe=collect(flux_3d[:, :, 4]),
+        νμ=collect(flux_3d[:, :, 2]),
+        antiνe=collect(flux_3d[:, :, 5]),
+        antiνμ=collect(flux_3d[:, :, 3]),
+    )
+    interpolated_fluxes = map((native.νe, native.νμ, native.antiνe, native.antiνμ)) do flux
+        _, values = interpolate_flux_at_bin_centers(
+            energies,
+            flux,
+            energies_in_log,
+        )
+        values
     end
+    bin_centers, _ = interpolate_flux_at_bin_centers(
+        energies,
+        native.νe,
+        energies_in_log,
+    )
+    interpolated = (
+        energies=bin_centers,
+        cosθgrid=cosines,
+        νe=interpolated_fluxes[1],
+        νμ=interpolated_fluxes[2],
+        antiνe=interpolated_fluxes[3],
+        antiνμ=interpolated_fluxes[4],
+    )
+    return (; native, interpolated)
+end
 
-    # convert DataFrame to a 2D Matrix, then reshape to a 3D grid
-    flux_3d = reshape(Matrix(raw_df), nEbins, nθbins, 5)
- 
-    # Slice the 3D grid to extract the 2D planes for each specific flavor
-    energies      = flux_3d[:, 1, 1]
-    nuflux_νμ     = flux_3d[:, :, 2]
-    nuflux_antiνμ = flux_3d[:, :, 3]
-    nuflux_νe     = flux_3d[:, :, 4]
-    nuflux_antiνe = flux_3d[:, :, 5]
+function _resolve_neutrino_flux_csv(path::AbstractString)
+    candidates = String[path]
+    endswith(lowercase(path), ".csv") || push!(candidates, path * ".csv")
+    data_dir = normpath(joinpath(@__DIR__, "..", "..", "dataInput", "neutrinoFluxData"))
+    append!(candidates, joinpath.(Ref(data_dir), basename.(copy(candidates))))
+    match = findfirst(isfile, candidates)
+    isnothing(match) &&
+        throw(ArgumentError(
+            "neutrino-flux CSV not found; tried $(join(candidates, ", "))",
+        ))
+    return abspath(candidates[match])
+end
 
-    # Compute values at bin centers
-    bin_centers, nuflux_νμ_interp = interpolate_flux_at_bin_centers(energies, nuflux_νμ, true)
-    -, nuflux_antiνμ_interp = interpolate_flux_at_bin_centers(energies, nuflux_antiνμ, true)
-    -, nuflux_νe_interp     = interpolate_flux_at_bin_centers(energies, nuflux_νe, true)
-    -, nuflux_antiνe_interp = interpolate_flux_at_bin_centers(energies, nuflux_antiνe, true)
-
-    return bin_centers, nuflux_νe_interp, nuflux_νμ_interp, nuflux_antiνe_interp, nuflux_antiνμ_interp, energies, nuflux_νe, nuflux_νμ, nuflux_antiνe, nuflux_antiνμ
-
+# Positional compatibility without the former ten-element return value.
+function read_neutrino_flux_table(
+    path::AbstractString,
+    nEbins::Integer,
+    nθbins::Integer,
+    has_header::Bool,
+)
+    return read_neutrino_flux_table(
+        path;
+        nEbins=nEbins,
+        nθbins=nθbins,
+        has_header=has_header,
+    )
 end
 
 """
@@ -93,11 +112,12 @@ A tuple containing:
 1. `bin_centers`: The calculated centers of the energy bins.
 2. `interpolated_flux`: The flux evaluated at the bin centers.
 """
-function interpolate_flux_at_bin_centers(energies::Vector{Float64}, flux::Matrix{Float64}, energies_in_log::Bool)
+function interpolate_flux_at_bin_centers(
+    energies::AbstractVector{<:Real},
+    flux::AbstractMatrix{<:Real},
+    energies_in_log::Bool,
+)
     
-    # create 1D coordinate array for the y axis
-    angles_indices = 1.0:size(flux, 2)
-
     # calculate the bin centers    
     if energies_in_log == true
         bin_centers = sqrt.(energies[1:end-1] .* energies[2:end]) 
@@ -124,10 +144,98 @@ Initialize a dictionary of Daemonflux parameters set to their default values.
 # Returns
 - `Dict{String, Float64}`: A dictionary mapping parameter names to `0.0`.
 """
+const _PYTHONCALL_PKGID = Base.PkgId(
+    Base.UUID("6099a3de-0909-46bc-b1f4-468b9a2dfc0d"),
+    "PythonCall",
+)
+
+_require_pythoncall() = Base.require(_PYTHONCALL_PKGID)
+
+function _daemonflux_instance(
+    pythoncall::Module;
+    retries::Integer=3,
+    retry_delay::Real=2,
+)
+    retries >= 1 || throw(ArgumentError("retries must be at least 1"))
+    daemonflux = pythoncall.pyimport("daemonflux")
+    for attempt in 1:retries
+        try
+            return daemonflux.Flux(
+                location="IceCube",
+                use_calibration=true,
+                debug=1,
+            )
+        catch error
+            if attempt == retries
+                message = sprint(showerror, error)
+                throw(ErrorException(
+                    "Daemonflux could not initialize its IceCube data after " *
+                    "$retries attempts. Its official GitHub release assets may " *
+                    "be temporarily unreachable. Check access to github.com and " *
+                    "release-assets.githubusercontent.com, then call " *
+                    "`prefetch_daemonflux_data!()` or retry the computation.\n" *
+                    "Last Python error:\n$message",
+                ))
+            end
+            sleep(retry_delay * 2.0^(attempt - 1))
+        end
+    end
+    error("unreachable")
+end
+
+"""
+    prefetch_daemonflux_data!(; retries=3, retry_delay=2)
+
+Download, cache and validate the official Daemonflux IceCube spline and
+calibration assets before a long computation. Existing cached files are reused.
+This is optional because Daemonflux also initializes lazily on first use.
+"""
+function prefetch_daemonflux_data!(;
+    retries::Integer=3,
+    retry_delay::Real=2,
+)
+    pythoncall = _require_pythoncall()
+    return Base.invokelatest(
+        _prefetch_daemonflux_data!,
+        pythoncall;
+        retries=retries,
+        retry_delay=retry_delay,
+    )
+end
+
+function _prefetch_daemonflux_data!(
+    pythoncall::Module;
+    retries::Integer=3,
+    retry_delay::Real=2,
+)
+    flux = _daemonflux_instance(
+        pythoncall;
+        retries=retries,
+        retry_delay=retry_delay,
+    )
+    parameter_count = length(
+        pythoncall.pyconvert(Vector{String}, flux.params.known_parameters),
+    )
+    return (
+        model=:Daemonflux,
+        location=:IceCube,
+        ready=true,
+        parameter_count=parameter_count,
+    )
+end
+
 function set_dflux_params(flux_obj)
+    pythoncall = _require_pythoncall()
+    return Base.invokelatest(_set_dflux_params, pythoncall, flux_obj)
+end
+
+function _set_dflux_params(pythoncall::Module, flux_obj)
 
     # Fetch all the Daemonflux parameter names 
-    params = pyconvert(Vector{String}, flux_obj.params.known_parameters)
+    params = pythoncall.pyconvert(
+        Vector{String},
+        flux_obj.params.known_parameters,
+    )
 
     # Set all parameters to 0 (meaning that their difference with respect to the
     # default parameters is zero)
@@ -153,10 +261,27 @@ The get_dflux_param_value function helps find specific values.
 # Returns
 - `Dict{String, Float64}` 
 """
-function set_dflux_params(flux_obj, params_dict::Union{Nothing, Dict{String, Any}})
+function set_dflux_params(
+    flux_obj,
+    params_dict::Union{Nothing,Dict{String,Any}},
+)
+    pythoncall = _require_pythoncall()
+    return Base.invokelatest(
+        _set_dflux_params,
+        pythoncall,
+        flux_obj,
+        params_dict,
+    )
+end
+
+function _set_dflux_params(
+    pythoncall::Module,
+    flux_obj,
+    params_dict::Union{Nothing,Dict{String,Any}},
+)
 
     # Set default Daemonflux parameters
-    full_params = set_dflux_params(flux_obj)
+    full_params = _set_dflux_params(pythoncall, flux_obj)
 
     # If params_dict is nothing, just return the defaults without trying to merge
     if isnothing(params_dict)
@@ -183,7 +308,36 @@ Find the value of the parameter `param_name` which is `signed_sigma` away from t
 - `max_param`: The maximum search limit for the absolute value of the parameter value.
 - `tol`: The relative tolerance on the target distance from the default value.
 """
-function get_dflux_param_value(flux_obj, param_name, signed_sigma; max_iterations=10000, max_param=10., tol=0.01)
+function get_dflux_param_value(
+    flux_obj,
+    param_name,
+    signed_sigma;
+    max_iterations=10000,
+    max_param=10.0,
+    tol=0.01,
+)
+    pythoncall = _require_pythoncall()
+    return Base.invokelatest(
+        _get_dflux_param_value,
+        pythoncall,
+        flux_obj,
+        param_name,
+        signed_sigma;
+        max_iterations=max_iterations,
+        max_param=max_param,
+        tol=tol,
+    )
+end
+
+function _get_dflux_param_value(
+    pythoncall::Module,
+    flux_obj,
+    param_name,
+    signed_sigma;
+    max_iterations=10000,
+    max_param=10.0,
+    tol=0.01,
+)
     
     # Determine the sign of the parameter based on if it should be above or below the default value
     p_sign = sign(signed_sigma)
@@ -195,7 +349,10 @@ function get_dflux_param_value(flux_obj, param_name, signed_sigma; max_iteration
     p_high = max_param
 
     # Evaluate the function at the upper boundary to ensure a root exists
-    chi2_high = pyconvert(Float64, flux_obj.chi2(params=Dict(param_name => p_high)))
+    chi2_high = pythoncall.pyconvert(
+        Float64,
+        flux_obj.chi2(params=Dict(param_name => p_high)),
+    )
     diff_high = sqrt(chi2_high) - sigma
     # If the target is out of bounds, fail immediately 
     if diff_high < 0.0
@@ -206,7 +363,10 @@ function get_dflux_param_value(flux_obj, param_name, signed_sigma; max_iteration
     for i in 1:max_iterations
 
         p_mid = (p_low + p_high) / 2
-        chi2_mid = pyconvert(Float64, flux_obj.chi2(params=Dict(param_name => p_mid)))
+        chi2_mid = pythoncall.pyconvert(
+            Float64,
+            flux_obj.chi2(params=Dict(param_name => p_mid)),
+        )
         sigma_diff = sqrt(chi2_mid) - sigma
 
         # Check if we are within the relative tolerance threshold
@@ -244,6 +404,310 @@ function set_hflux_params(nuflux_params::Dict{String, Any})
     filename = "http://www-rccn.icrr.u-tokyo.ac.jp/mhonda/public/nflx2014/$(loc_str)-$(season_str)-$(angles_str)$(mtn_str)-$(solar_str).d.gz"
     return filename
     
+end
+
+"""
+    NeutrinoFluxTable
+
+Named-tuple flux table evaluated on the exact flexOPT binning. Every matrix has
+shape `(length(energies), length(cosθgrid))`, matching the first two dimensions
+of the oscillation-probability arrays.
+"""
+const NeutrinoFluxTable = NamedTuple{
+    (:model, :energies, :cosθgrid, :νμ, :νe, :antiνμ, :antiνe, :uncertainties),
+}
+
+function _validate_flux_binning(binning::NamedTuple)
+    hasproperty(binning, :energies) ||
+        throw(ArgumentError("binning must contain energies"))
+    hasproperty(binning, :cosθgrid) ||
+        throw(ArgumentError("binning must contain cosθgrid"))
+    energies = Float64.(collect(binning.energies))
+    cosθgrid = Float64.(collect(binning.cosθgrid))
+    isempty(energies) && throw(ArgumentError("energies cannot be empty"))
+    isempty(cosθgrid) && throw(ArgumentError("cosθgrid cannot be empty"))
+    all(>(0), energies) || throw(ArgumentError("energies must be positive"))
+    all(diff(energies) .> 0) ||
+        throw(ArgumentError("energies must be strictly increasing"))
+    all(-1 .<= cosθgrid .<= 1) ||
+        throw(ArgumentError("cosθgrid values must lie in [-1, 1]"))
+    all(diff(cosθgrid) .> 0) ||
+        throw(ArgumentError("cosθgrid must be strictly increasing"))
+    return (; energies, cosθgrid)
+end
+
+function _resample_honda_flux(
+    raw_flux,
+    native_energies,
+    native_cosθ,
+    target_energies,
+    target_cosθ,
+)
+    flux = Float64.(raw_flux)
+    energies = Float64.(collect(native_energies))
+    cosines = Float64.(collect(native_cosθ))
+    size(flux) == (length(cosines), length(energies)) ||
+        throw(DimensionMismatch(
+            "Honda flux size must be (cosθ, energy); got $(size(flux))",
+        ))
+    all(>(0), energies) ||
+        throw(ArgumentError("Honda energy coordinates must be positive"))
+
+    # Interpolate log(flux) over (log(E), cosθ) to preserve positivity and the
+    # many-decade energy dependence.
+    log_flux = log.(max.(permutedims(flux), floatmin(Float64)))
+    interpolator = LinearInterpolation(
+        (log.(energies), cosines),
+        log_flux;
+        extrapolation_bc=Flat(),
+    )
+    return [
+        exp(interpolator(log(energy), cosine))
+        for energy in target_energies, cosine in target_cosθ
+    ]
+end
+
+function _flux_table_from_raw(
+    raw::AbstractDict,
+    binning::NamedTuple,
+    model::Symbol,
+)
+    (; energies, cosθgrid) = _validate_flux_binning(binning)
+    flux_names = ("NuMu_flux", "Nue_flux", "AntiNuMu_flux", "AntiNue_flux")
+    all(name -> haskey(raw, name), flux_names) ||
+        throw(ArgumentError("flux backend returned an incomplete flux table"))
+
+    matrices = if model === :Honda
+        native_energies = raw["Energies"]
+        native_cosθ = raw["cosθs"]
+        map(flux_names) do name
+            _resample_honda_flux(
+                raw[name],
+                native_energies,
+                native_cosθ,
+                energies,
+                cosθgrid,
+            )
+        end
+    else
+        expected_size = (length(cosθgrid), length(energies))
+        map(flux_names) do name
+            matrix = Float64.(raw[name])
+            size(matrix) == expected_size ||
+                throw(DimensionMismatch(
+                    "$name has size $(size(matrix)); expected $expected_size",
+                ))
+            permutedims(matrix)
+        end
+    end
+
+    uncertainty_names = (
+        "NuMu_flux_err",
+        "Nue_flux_err",
+        "AntiNuMu_flux_err",
+        "AntiNue_flux_err",
+    )
+    uncertainties = if all(name -> haskey(raw, name), uncertainty_names)
+        converted = map(uncertainty_names) do name
+            matrix = Float64.(raw[name])
+            size(matrix) == (length(cosθgrid), length(energies)) ||
+                throw(DimensionMismatch("invalid uncertainty size for $name"))
+            permutedims(matrix)
+        end
+        (νμ=converted[1], νe=converted[2],
+         antiνμ=converted[3], antiνe=converted[4])
+    else
+        nothing
+    end
+
+    return (
+        model=model,
+        energies=energies,
+        cosθgrid=cosθgrid,
+        νμ=matrices[1],
+        νe=matrices[2],
+        antiνμ=matrices[3],
+        antiνe=matrices[4],
+        uncertainties=uncertainties,
+    )
+end
+
+"""
+    produce_neutrino_flux(binning;
+        model=DEFAULT_NUFLUX_MODEL[], params=DEFAULT_NUFLUX_PARAMS[])
+
+Produce the selected default flux directly on a flexOPT binning NamedTuple:
+
+    (energies=..., cosθgrid=...)
+
+Unlike the legacy dictionary method, this returns a `NeutrinoFluxTable` whose
+matrices use `(energy, cosθ)` ordering.
+"""
+function produce_neutrino_flux(
+    binning::NamedTuple;
+    model::Symbol=DEFAULT_NUFLUX_MODEL[],
+    params::NeutrinoFluxParameters=DEFAULT_NUFLUX_PARAMS[],
+)
+    selected_model = _validate_neutrino_flux_model(model)
+    selected_params = _validate_neutrino_flux_parameters(params)
+    validated_binning = _validate_flux_binning(binning)
+    backend_params = _parameters_dict(
+        selected_params;
+        model=selected_model,
+        bin_centers_arrays=(
+            validated_binning.energies,
+            validated_binning.cosθgrid,
+        ),
+    )
+    raw = produce_neutrino_flux(backend_params)
+    return _flux_table_from_raw(raw, validated_binning, selected_model)
+end
+
+function _cached_neutrino_flux(config::AbstractDict)
+    binning = (
+        energies=config["energies"],
+        cosθgrid=config["cosθgrid"],
+    )
+    table = produce_neutrino_flux(
+        binning;
+        model=config["model"],
+        params=config["params"],
+    )
+    # DrWatson's metadata/tagging layer requires an AbstractDict. Keep that
+    # implementation detail inside the cache and expose only the named tuple.
+    return Dict{String,Any}("table" => table)
+end
+
+"""
+    produce_or_load_neutrino_flux(binning;
+        model=DEFAULT_NUFLUX_MODEL[], params=DEFAULT_NUFLUX_PARAMS[],
+        directory="neutrinoFlux", prefix="flux")
+
+Load a previously generated flux table or generate and cache it with
+`commonBatchs.myProduceOrLoad`. The cache key contains the complete binning,
+backend and typed parameter set. The returned value is the same
+`NeutrinoFluxTable` named tuple as [`produce_neutrino_flux`](@ref).
+"""
+function produce_or_load_neutrino_flux(
+    binning::NamedTuple;
+    model::Symbol=DEFAULT_NUFLUX_MODEL[],
+    params::NeutrinoFluxParameters=DEFAULT_NUFLUX_PARAMS[],
+    directory::AbstractString="neutrinoFlux",
+    prefix::AbstractString="flux",
+)
+    validated_binning = _validate_flux_binning(binning)
+    selected_model = _validate_neutrino_flux_model(model)
+    selected_params = _validate_neutrino_flux_parameters(params)
+    config = Dict{String,Any}(
+        "model" => selected_model,
+        "params" => selected_params,
+        "energies" => validated_binning.energies,
+        "cosθgrid" => validated_binning.cosθgrid,
+    )
+    cached = myProduceOrLoad(
+        _cached_neutrino_flux,
+        config,
+        String(directory),
+        String(prefix),
+    )
+    haskey(cached, "table") ||
+        error("invalid neutrino-flux cache entry: missing \"table\"")
+    return cached["table"]
+end
+
+function _flux_component(table::NeutrinoFluxTable, flavor::Symbol)
+    aliases = (
+        νe=:νe,
+        nue=:νe,
+        νμ=:νμ,
+        numu=:νμ,
+        antiνe=:antiνe,
+        antinue=:antiνe,
+        antiνμ=:antiνμ,
+        antinumu=:antiνμ,
+    )
+    hasproperty(aliases, flavor) ||
+        throw(ArgumentError(
+            "unknown flavor $flavor; use :νe, :νμ, :antiνe or :antiνμ",
+        ))
+    canonical = getproperty(aliases, flavor)
+    return getproperty(table, canonical)
+end
+
+"""
+    plot_neutrino_flux_spectra(table; energy_power=3, angular=:mean)
+
+Create a Makie figure of the four atmospheric-flux spectra. `angular` may be
+`:mean` or `:sum`; the former is independent of the number of angular bins.
+"""
+function plot_neutrino_flux_spectra(
+    table::NeutrinoFluxTable;
+    energy_power::Real=3,
+    angular::Symbol=:mean,
+)
+    angular in (:mean, :sum) ||
+        throw(ArgumentError("angular must be :mean or :sum"))
+    reduce_angles = angular === :mean ?
+                    matrix -> vec(sum(matrix; dims=2)) ./ size(matrix, 2) :
+                    matrix -> vec(sum(matrix; dims=2))
+    figure = Figure()
+    axis = Axis(
+        figure[1, 1];
+        xscale=log10,
+        yscale=log10,
+        xlabel="E / GeV",
+        ylabel="ϕ E^$(energy_power)",
+    )
+    scale = table.energies .^ energy_power
+    for (field, label) in (
+        (:νe, "νₑ"),
+        (:νμ, "νμ"),
+        (:antiνe, "ν̄ₑ"),
+        (:antiνμ, "ν̄μ"),
+    )
+        lines!(
+            axis,
+            table.energies,
+            scale .* reduce_angles(getproperty(table, field));
+            label=label,
+        )
+    end
+    axislegend(axis; position=:lb)
+    return (; figure, axis)
+end
+
+"""
+    plot_neutrino_flux_heatmap(table; flavor=:νμ, logscale=true)
+
+Create a Makie `(energy, cosθ)` heatmap for one flavor. The returned named
+tuple contains `figure`, `axis`, `plot` and `colorbar`.
+"""
+function plot_neutrino_flux_heatmap(
+    table::NeutrinoFluxTable;
+    flavor::Symbol=:νμ,
+    logscale::Bool=true,
+)
+    values = _flux_component(table, flavor)
+    plotted = logscale ? log10.(max.(values, floatmin(Float64))) : values
+    figure = Figure()
+    axis = Axis(
+        figure[1, 1];
+        xlabel="log₁₀(E / GeV)",
+        ylabel="cosθ",
+        title=string(flavor),
+    )
+    heatmap_plot = heatmap!(
+        axis,
+        log10.(table.energies),
+        table.cosθgrid,
+        plotted,
+    )
+    colorbar = Colorbar(
+        figure[1, 2],
+        heatmap_plot;
+        label=logscale ? "log₁₀(ϕ)" : "ϕ",
+    )
+    return (; figure, axis, plot=heatmap_plot, colorbar)
 end
 
 """
@@ -309,17 +773,27 @@ Produce the atmospheric neutrino flux for all relevant neutrino types using the 
 See produce_neutrino_flux for more information.
 """
 function produce_daemonflux_neutrino_flux(nuflux_params::Dict{String, Any})
+    pythoncall = _require_pythoncall()
+    return Base.invokelatest(
+        _produce_daemonflux_neutrino_flux,
+        pythoncall,
+        nuflux_params,
+    )
+end
+
+function _produce_daemonflux_neutrino_flux(
+    pythoncall::Module,
+    nuflux_params::Dict{String,Any},
+)
     
     # Read some inputs
     Ebin_centers, cosθbin_centers = nuflux_params["bin_centers_arrays"]
     flux_mode            = Symbol(nuflux_params["flux_mode"])
     return_uncertainties = Bool(nuflux_params["return_uncertainties"])
 
-    # Import and instantiate Python daemonflux class
-    daemonflux = pyimport("daemonflux")
-    flux = daemonflux.Flux(location="IceCube", 
-                           use_calibration=true, 
-                           debug=1)
+    # Instantiate Daemonflux and retry transient GitHub release-asset failures.
+    # Once downloaded, Daemonflux reuses its package-local spline cache.
+    flux = _daemonflux_instance(pythoncall)
 
     # Convert to degrees, as needed by daemonflux
     θbin_centers = string.(rad2deg.(acos.(cosθbin_centers)))
@@ -353,24 +827,24 @@ function produce_daemonflux_neutrino_flux(nuflux_params::Dict{String, Any})
     # Set daemonflux parameters
     raw_params_df = get(nuflux_params, "params_df", nothing)
     params = (isnothing(raw_params_df) || isempty(raw_params_df)) ? 
-             set_dflux_params(flux, Dict{String, Any}()) : 
-             set_dflux_params(flux, raw_params_df)
+             _set_dflux_params(pythoncall, flux, Dict{String, Any}()) :
+             _set_dflux_params(pythoncall, flux, raw_params_df)
             
     # Energy scaling
     E_scaling = 1.e4 ./ (Ebin_centers .^ 3)
     # Fetch raw daemonflux values
     @views for (i, θ) in enumerate(θbin_centers)
         # flux values
-        NuMu_flux[i, :]     .= pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.numu,  params=params)) .* E_scaling
-        Nue_flux[i, :]      .= pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.nue,   params=params)) .* E_scaling
-        AntiNuMu_flux[i, :] .= pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.anumu, params=params)) .* E_scaling
-        AntiNue_flux[i, :]  .= pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.anue,  params=params)) .* E_scaling
+        NuMu_flux[i, :]     .= pythoncall.pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.numu,  params=params)) .* E_scaling
+        Nue_flux[i, :]      .= pythoncall.pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.nue,   params=params)) .* E_scaling
+        AntiNuMu_flux[i, :] .= pythoncall.pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.anumu, params=params)) .* E_scaling
+        AntiNue_flux[i, :]  .= pythoncall.pyconvert(Vector{Float64}, flux.flux(Ebin_centers, θ, keys.anue,  params=params)) .* E_scaling
         if return_uncertainties
             # flux uncertainties
-            NuMu_flux_err[i, :]     .= pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.numu))
-            Nue_flux_err[i, :]      .= pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.nue))
-            AntiNuMu_flux_err[i, :] .= pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.anumu))
-            AntiNue_flux_err[i, :]  .= pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.anue))
+            NuMu_flux_err[i, :]     .= pythoncall.pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.numu))
+            Nue_flux_err[i, :]      .= pythoncall.pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.nue))
+            AntiNuMu_flux_err[i, :] .= pythoncall.pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.anumu))
+            AntiNue_flux_err[i, :]  .= pythoncall.pyconvert(Vector{Float64}, flux.error(Ebin_centers, θ, keys.anue))
         end
     end
 

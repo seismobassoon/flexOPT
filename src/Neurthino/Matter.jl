@@ -167,6 +167,8 @@ end
 - `path`: Neutrino path
 - `zoa`: Proton nucleon ratio (Z/A)
 - `anti`: Is anti neutrino
+- `roundU_and_H`: Round the vacuum PMNS matrix and Hamiltonian before
+  constructing the layer-dependent matter matrices
 """
 function oscprob(
     osc_vacuum::OscillationParameters,
@@ -174,12 +176,19 @@ function oscprob(
     path::Union{Path,AbstractVector{<:Path}};
     zoa=0.5,
     anti=false,
+    roundU_and_H=false,
 )
     # TODO: attach U_vac and H_vac to the oscillation parameters, so that it's
     # only calculated once and invalidated when any of the oscillation parameters
     # are changed
-    U_vac = PMNSMatrix(osc_vacuum; anti=anti)
+    # The lower-level matter method applies `conj(U_vac)` when `anti=true`.
+    # Keep U_vac in its neutrino convention here to avoid conjugating twice.
+    U_vac = PMNSMatrix(osc_vacuum)
     H_vac = Hamiltonian(osc_vacuum)
+    if roundU_and_H
+        U_vac = roundExt.(U_vac, 0.01)
+        H_vac = roundExt.(H_vac, 0.00001)
+    end
     paths = path isa Path ? [path] : path
     oscprob(U_vac, H_vac, energy, paths; zoa=zoa, anti=anti)
 end
