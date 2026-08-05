@@ -166,6 +166,9 @@ function prepare_specfem2d_case(
     f0=1.0,
     source_factor=1.0e10,
     source_angle=0.0,
+    source_time_function=nothing,
+    receiver_z=maximum(surface_z isa Real ? [surface_z] : surface_z),
+    free_surface=true,
     nx_elements=max(4, cld(length(x) - 1, 4)),
     nz_elements=max(4, cld(length(z) - 1, 4)),
 )
@@ -203,17 +206,17 @@ function prepare_specfem2d_case(
         ("nreceiversets", "1"),
         ("nrec", string(length(receivers))),
         ("xdeb", string(first(receivers))),
-        ("zdeb", string(maximum(surface_z isa Real ? [surface_z] : surface_z))),
+        ("zdeb", string(receiver_z)),
         ("xfin", string(last(receivers))),
-        ("zfin", string(maximum(surface_z isa Real ? [surface_z] : surface_z))),
-        ("record_at_surface_same_vertical", ".true."),
+        ("zfin", string(receiver_z)),
+        ("record_at_surface_same_vertical", free_surface ? ".true." : ".false."),
         ("interfacesfile", basename(interfaces_file)),
         ("xmin", string(first(x))),
         ("xmax", string(last(x))),
         ("nx", string(nx_elements)),
         ("absorbbottom", ".true."),
         ("absorbright", ".true."),
-        ("absorbtop", ".false."),
+        ("absorbtop", free_surface ? ".false." : ".true."),
         ("absorbleft", ".true."),
         ("nbmodels", "1"),
         ("nbregions", "1"),
@@ -239,6 +242,31 @@ function prepare_specfem2d_case(
     source_text = _set_parameter(source_text, "source_type", 1)
     source_text = _set_parameter(source_text, "anglesource", source_angle)
     source_text = _set_parameter(source_text, "factor", source_factor)
+    source_time_function_file = nothing
+    if !isnothing(source_time_function)
+        nstep = ceil(Int, duration / dt)
+        times = (0:nstep-1) .* dt
+        values = source_time_function isa Function ?
+            Float64.(source_time_function.(times)) :
+            Float64.(collect(source_time_function))
+        length(values) == nstep || throw(DimensionMismatch(
+            "external SPECFEM source needs $nstep samples, got $(length(values))",
+        ))
+        all(isfinite, values) || throw(ArgumentError(
+            "external SPECFEM source contains non-finite values",
+        ))
+        source_time_function_file = joinpath(data_path, "source_time_function.txt")
+        open(source_time_function_file, "w") do io
+            for (time, value) in zip(times, values)
+                println(io, time, " ", value)
+            end
+        end
+        source_text = _set_parameter(source_text, "time_function_type", 8)
+        source_text = _set_parameter(
+            source_text, "name_of_source_file",
+            "./DATA/$(basename(source_time_function_file))",
+        )
+    end
     write(joinpath(data_path, "SOURCE"), source_text)
 
     (
@@ -249,8 +277,11 @@ function prepare_specfem2d_case(
         interfaces=interfaces_file,
         par_file=joinpath(data_path, "Par_file"),
         source_file=joinpath(data_path, "SOURCE"),
+        source_time_function_file,
         source_factor=Float64(source_factor),
         source_angle=Float64(source_angle),
+        receiver_z=Float64(receiver_z),
+        free_surface=Bool(free_surface),
         surface=surface_z,
         nx_elements,
         nz_elements,
