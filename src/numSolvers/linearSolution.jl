@@ -691,6 +691,7 @@ function propagateLinearSystem(
     output_stride::Integer=1,
     initialCondition=0.0,
     blowup_limit=Inf,
+    solver_name="OPT",
 )
     Nt > 0 || throw(ArgumentError("Nt must be positive"))
     output_stride > 0 || throw(ArgumentError("output_stride must be positive"))
@@ -726,7 +727,7 @@ function propagateLinearSystem(
         unknownField .= reshape(factor \ b, prepared.NpointsSpace, prepared.NField)
         amplitude = maximum(abs, unknownField)
         if !isfinite(amplitude) || amplitude > blowup_limit
-            @warn "stopping OPT propagation" step amplitude blowup_limit
+            @warn "stopping propagation" solver_name step amplitude blowup_limit
             stopped_early = true
             break
         end

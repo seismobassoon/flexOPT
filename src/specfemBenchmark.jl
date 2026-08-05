@@ -437,6 +437,13 @@ function waveform_metrics(reference, candidate; samples=2001)
     time = collect(range(start_time, end_time; length=samples))
     a = [_linear_sample(reference.time, reference.values, t) for t in time]
     b = [_linear_sample(candidate.time, candidate.values, t) for t in time]
+    raw_residual = b .- a
+    bias = sum(raw_residual) / length(raw_residual)
+    mse = sum(abs2, raw_residual) / length(raw_residual)
+    error_variance = sum(abs2, raw_residual .- bias) / length(raw_residual)
+    reference_mean = sum(a) / length(a)
+    reference_variance = sum(abs2, a .- reference_mean) / length(a)
+    relative_rmse = reference_variance == 0 ? NaN : sqrt(mse / reference_variance)
     a .-= sum(a) / length(a)
     b .-= sum(b) / length(b)
     denom = sqrt(sum(abs2, a) * sum(abs2, b))
@@ -444,7 +451,8 @@ function waveform_metrics(reference, candidate; samples=2001)
     amplitude = sum(abs2, b) == 0 ? NaN : sum(a .* b) / sum(abs2, b)
     relative_error = sum(abs2, a) == 0 ? NaN :
         sqrt(sum(abs2, a .- amplitude .* b) / sum(abs2, a))
-    (; correlation, relative_error, optimal_amplitude=amplitude, time)
+    (; correlation, relative_error, optimal_amplitude=amplitude,
+       bias, mse, error_variance, reference_variance, relative_rmse, time)
 end
 
 function plot_solver_benchmark(traces; normalize=true, title="Elastic 2D benchmark")
