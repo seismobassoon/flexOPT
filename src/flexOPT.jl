@@ -7,9 +7,14 @@ module flexOPT
     using ..commonBatchs
     using Adapt
 
-    # GPU backend (batchFiles/batchGPU.jl should be called in Main)
-    backend = Main.backend
-    makeGPUarray = Main.makeGPUarray
+    # Use the backend selected by batchFiles/batchGPU.jl when the caller has
+    # loaded it.  A module import must nevertheless remain valid on its own:
+    # recipe construction then falls back to the KernelAbstractions CPU.
+    const backend = isdefined(Main, :backend) ?
+        getfield(Main, :backend) : KernelAbstractions.CPU()
+    const makeGPUarray = isdefined(Main, :makeGPUarray) ?
+        getfield(Main, :makeGPUarray) :
+        ((selected_backend, array) -> Adapt.adapt(selected_backend, array))
 
 
     # wrapping functions
