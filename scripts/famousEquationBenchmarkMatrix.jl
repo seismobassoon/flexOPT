@@ -33,12 +33,12 @@ function interpolation_geometry(points::Int, mode::Symbol)
 end
 
 function scheme(name, family, points; geometry=:center,
-                supplementary_order=family === :FD ? 0 : 2,
-                role=family === :FD ? :reference : :candidate)
+                supplementary_order=family in (:explicitFD, :convFD) ? 0 : 2,
+                role=family in (:explicitFD, :convFD) ? :reference : :candidate)
     itpl = interpolation_geometry(points, geometry)
     return (; name, family, points_space=points, points_time=3,
-        order_b_space=family === :FD ? -1 : 1,
-        order_b_time=family === :FD ? -1 : 1,
+        order_b_space=family in (:explicitFD, :convFD) ? -1 : 1,
+        order_b_time=family in (:explicitFD, :convFD) ? -1 : 1,
         supplementary_order,
         interpolation_geometry=geometry,
         taylor_inverse_mode=:hierarchical_constrained,
@@ -46,18 +46,13 @@ function scheme(name, family, points; geometry=:center,
 end
 
 const SCHEMES = [
-    scheme("FD3", :FD, 3),
-    scheme("FD4", :FD, 4),
-    scheme("FD5", :FD, 5),
-    scheme("OPT3-center", :OPT, 3; geometry=:center, role=:robust_candidate),
-    scheme("OPT3-material-staggered", :OPT, 3; geometry=:material_staggered),
-    scheme("OPT3-multipoint", :OPT, 3; geometry=:multipoint),
-    scheme("OPT4-center", :OPT, 4; geometry=:center),
-    scheme("OPT4-material-staggered", :OPT, 4; geometry=:material_staggered),
-    scheme("OPT4-multipoint", :OPT, 4; geometry=:multipoint),
-    scheme("OPT5-center", :OPT, 5; geometry=:center),
-    scheme("OPT5-material-staggered", :OPT, 5; geometry=:material_staggered),
-    scheme("OPT5-multipoint", :OPT, 5; geometry=:multipoint,
+    scheme("explicitFD", :explicitFD, 3),
+    scheme("convFD", :convFD, 3),
+    scheme("OPT3", :OPT, 3; geometry=:center, role=:robust_candidate),
+    # For an even stencil, :center places the single Taylor centre at the
+    # geometric midpoint (offset 1.5 for four points).
+    scheme("OPT4", :OPT, 4; geometry=:center),
+    scheme("OPT5", :OPT, 5; geometry=:center,
         role=:high_accuracy_candidate),
 ]
 
@@ -161,6 +156,14 @@ const MATERIAL_SCENARIOS = [
         phase=pi / 2,
         amplitude_fraction=0.15,
         relation=:same_wavelength,
+    ),
+    (
+        name="long_material_phase0",
+        active=:all,
+        material_wave=(1, 1, 1),
+        phase=0.0,
+        amplitude_fraction=0.15,
+        relation=:material_longer,
     ),
     (
         name="short_material_phase0",

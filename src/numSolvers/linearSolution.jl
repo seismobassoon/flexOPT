@@ -645,7 +645,7 @@ function applyBoundaryConditionForced!(A, b; leftValue=1.0, rightValue=1.0)
     return A, b
 end
 
-function prepareConstantMatrix(preparedLin;
+function materializeConstantMatrix(preparedLin;
     boundaryConditionForced=false,
     sparse_output=true,
     leftValue=1.0,
@@ -671,17 +671,37 @@ function prepareConstantMatrix(preparedLin;
         applyBoundaryConditionForced!(A, btmp; leftValue=leftValue, rightValue=rightValue)
     end
 
-    factor = lu(A)
-    return A, factor
+    return A
+end
+
+function prepareConstantMatrix(preparedLin; kwargs...)
+    A = materializeConstantMatrix(preparedLin; kwargs...)
+    return A, lu(A)
 end
 
 """
-    propagateLinearSystem(prepared, Nt, dt; sourceFull, output_stride=1)
+    propagateLinearSystem(prepared, Nt, dt; sourceFull, output_stride=1,
+        scheme=:direct, predictor_prepared=nothing,
+        corrector_iterations=1, corrector_tolerance=0,
+        corrector_relaxation=1)
 
 Run an already prepared OPT time-marching system in memory and return field
 snapshots with layout `(space..., field, output_time)`. `sourceFull` uses
 `(space_point, force_field, source_time)` and must include the extra time
 levels required by the OPT stencil.
+
+With `scheme=:predictor_corrector`, `predictor_prepared` represents the
+truncated operator `A_tr`. At every time step it first solves
+
+`A_tr u_pred = b_tr`,
+
+then applies one or more defect-correction iterations
+
+`A_tr δu = b - A u`,  `u ← u + ω δu`.
+
+This is a stationary Richardson iteration preconditioned by `A_tr`. The full
+matrix is applied but never factorized; only the truncated matrix is
+factorized. `corrector_iterations=0` returns the predictor alone.
 """
 function propagateLinearSystem(
     prepared,
@@ -692,6 +712,11 @@ function propagateLinearSystem(
     initialCondition=0.0,
     blowup_limit=Inf,
     solver_name="OPT",
+    scheme::Symbol=:direct,
+    predictor_prepared=nothing,
+    corrector_iterations::Integer=1,
+    corrector_tolerance::Real=0.0,
+    corrector_relaxation::Real=1.0,
 )
     Nt > 0 || throw(ArgumentError("Nt must be positive"))
     output_stride > 0 || throw(ArgumentError("output_stride must be positive"))
@@ -705,46 +730,134 @@ function propagateLinearSystem(
         throw(DimensionMismatch(
             "sourceFull needs at least $minimum_source_times time samples",
         ))
+    scheme in (:direct, :predictor_corrector) ||
+        throw(ArgumentError("scheme must be :direct or :predictor_corrector"))
+    corrector_iterations >= 0 ||
+        throw(ArgumentError("corrector_iterations must be nonnegative"))
+    corrector_tolerance >= 0 ||
+        throw(ArgumentError("corrector_tolerance must be nonnegative"))
+    0 < corrector_relaxation <= 2 ||
+        throw(ArgumentError("corrector_relaxation must lie in (0, 2]"))
+
+    predictor = scheme === :direct ? prepared : predictor_prepared
+    isnothing(predictor) && throw(ArgumentError(
+        "predictor_prepared is required for :predictor_corrector"))
+    if scheme === :predictor_corrector
+        compatibility = (
+            :spaceShape, :NpointsSpace, :NField, :NforcePoints,
+            :NForceField, :timePointsUsedForOneStep,
+        )
+        for name in compatibility
+            getproperty(predictor, name) == getproperty(prepared, name) ||
+                throw(DimensionMismatch(
+                    "predictor and full systems disagree on $name"))
+        end
+        size(predictor.known_lhs_template) ==
+            size(prepared.known_lhs_template) ||
+            throw(DimensionMismatch("predictor known-field layout differs"))
+        size(predictor.known_rhs_template) ==
+            size(prepared.known_rhs_template) ||
+            throw(DimensionMismatch("predictor force layout differs"))
+    end
 
     knownField = fill(Float64(initialCondition), size(prepared.known_lhs_template))
     knownForce = fill(Float64(initialCondition), size(prepared.known_rhs_template))
     unknownField = fill(Float64(initialCondition), prepared.NpointsSpace, prepared.NField)
-    _, factor = prepareConstantMatrix(prepared; sparse_output=true)
+    fullMatrix = nothing
+    factor = nothing
+    matrix_setup_wall_time_s = @elapsed begin
+        if scheme === :direct
+            _, factor = prepareConstantMatrix(prepared; sparse_output=true)
+        else
+            fullMatrix = materializeConstantMatrix(prepared; sparse_output=true)
+            _, factor = prepareConstantMatrix(predictor; sparse_output=true)
+        end
+    end
     b = copy(prepared.b_template)
+    predictor_b = scheme === :predictor_corrector ?
+        copy(predictor.b_template) : nothing
+    residual = scheme === :predictor_corrector ? similar(b) : nothing
     requested_steps = unique(vcat(0, collect(output_stride:output_stride:Nt), Nt))
     stored_lookup = Set(requested_steps)
     stored_steps = Int[0]
     snapshots = Array{Float64}[]
     times = Float64[]
     stopped_early = false
+    corrector_iterations_per_step = Int[]
+    corrector_relative_residuals = Float64[]
     push!(snapshots, reshape(copy(unknownField), prepared.spaceShape..., prepared.NField))
     push!(times, 0.0)
     nKnownTime = size(knownField, 3)
 
-    for step in 1:Nt
-        knownForce .= sourceFull[:, :, step:step+prepared.timePointsUsedForOneStep-1]
-        prepared.b_fun!(b, vcat(vec(knownField), vec(knownForce)))
-        unknownField .= reshape(factor \ b, prepared.NpointsSpace, prepared.NField)
-        amplitude = maximum(abs, unknownField)
-        if !isfinite(amplitude) || amplitude > blowup_limit
-            @warn "stopping propagation" solver_name step amplitude blowup_limit
-            stopped_early = true
-            break
-        end
-        if nKnownTime > 0
-            nKnownTime > 1 &&
-                (knownField[:, :, 1:end-1] .= knownField[:, :, 2:end])
-            knownField[:, :, end] .= unknownField
-        end
-        if step in stored_lookup
-            push!(snapshots,
-                  reshape(copy(unknownField), prepared.spaceShape..., prepared.NField))
-            push!(times, step * Float64(dt))
-            push!(stored_steps, step)
+    marching_wall_time_s = @elapsed begin
+        for step in 1:Nt
+            knownForce .= sourceFull[:, :, step:step+prepared.timePointsUsedForOneStep-1]
+            knownInputs = vcat(vec(knownField), vec(knownForce))
+            prepared.b_fun!(b, knownInputs)
+            if scheme === :direct
+                unknownField .= reshape(factor \ b,
+                    prepared.NpointsSpace, prepared.NField)
+            else
+                predictor.b_fun!(predictor_b, knownInputs)
+                unknownField .= reshape(factor \ predictor_b,
+                    prepared.NpointsSpace, prepared.NField)
+                unknownVector = vec(unknownField)
+                iterations_used = 0
+                relative_residual = Inf
+                for iteration in 1:corrector_iterations
+                    mul!(residual, fullMatrix, unknownVector)
+                    residual .= b .- residual
+                    relative_residual = norm(residual) / max(norm(b), eps(Float64))
+                    if relative_residual <= corrector_tolerance
+                        break
+                    end
+                    correction = factor \ residual
+                    unknownVector .+= corrector_relaxation .* correction
+                    iterations_used = iteration
+                end
+                # Report the residual of the field actually accepted.
+                mul!(residual, fullMatrix, unknownVector)
+                residual .= b .- residual
+                relative_residual = norm(residual) / max(norm(b), eps(Float64))
+                push!(corrector_iterations_per_step, iterations_used)
+                push!(corrector_relative_residuals, relative_residual)
+            end
+            amplitude = maximum(abs, unknownField)
+            if !isfinite(amplitude) || amplitude > blowup_limit
+                @warn "stopping propagation" solver_name step amplitude blowup_limit
+                stopped_early = true
+                break
+            end
+            if nKnownTime > 0
+                nKnownTime > 1 &&
+                    (knownField[:, :, 1:end-1] .= knownField[:, :, 2:end])
+                knownField[:, :, end] .= unknownField
+            end
+            if step in stored_lookup
+                push!(snapshots,
+                      reshape(copy(unknownField), prepared.spaceShape..., prepared.NField))
+                push!(times, step * Float64(dt))
+                push!(stored_steps, step)
+            end
         end
     end
-    history = cat(snapshots...; dims=length(prepared.spaceShape) + 2)
-    (; history, times, stored_steps, dt=Float64(dt), stopped_early)
+    history = nothing
+    history_assembly_wall_time_s = @elapsed begin
+        history = cat(snapshots...; dims=length(prepared.spaceShape) + 2)
+    end
+    predictor_corrector = scheme === :predictor_corrector ? (
+        iterations_per_step=corrector_iterations_per_step,
+        relative_residuals=corrector_relative_residuals,
+        requested_iterations=corrector_iterations,
+        tolerance=Float64(corrector_tolerance),
+        relaxation=Float64(corrector_relaxation),
+    ) : nothing
+    timing = (; matrix_setup_wall_time_s, marching_wall_time_s,
+        history_assembly_wall_time_s,
+        total_wall_time_s=matrix_setup_wall_time_s + marching_wall_time_s +
+            history_assembly_wall_time_s)
+    (; history, times, stored_steps, dt=Float64(dt), stopped_early,
+       scheme, predictor_corrector, timing)
 end
 
 function timeMarchingSchemeLinear(
