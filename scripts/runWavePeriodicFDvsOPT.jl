@@ -5,7 +5,7 @@
 # its own flexOPT recipe: no Δ=1 reference recipe is rescaled afterwards.
 
 import Pkg
-const FLEXOPT_ROOT = normpath(joinpath(@__DIR__, ".."))
+const FLEXOPT_ROOT = get(ENV, "FLEXOPT_ROOT", normpath(joinpath(@__DIR__, "..")))
 Pkg.activate(FLEXOPT_ROOT)
 
 using JLD2
@@ -26,9 +26,9 @@ using .commonBatchs
 using .flexOPT
 using .FamousEquationBenchmarkMatrix
 
-const WAVE_EQUATIONS = filter(e -> e.physics != :poisson, EQUATIONS)
-const FIELD_WAVE = (2.0, 1.0)
-const BASE = (rho=2.0, mu=3.0, lambda=4.0, velocity=2.0)
+const WAVE_EQUATIONS = EQUATIONS
+const FIELD_WAVE = (2.0, 1.0, 1.0)
+const BASE = (rho=2.0, mu=3.0, lambda=4.0, velocity=2.0, kappa=2.5)
 const CFL_RUN = 0.18
 const SCHEMA_VERSION = "wave_periodic_fd_opt_v2"
 
@@ -65,14 +65,17 @@ function characteristic_speed(equation)
     error("Unsupported physics $(equation.physics)")
 end
 
-function interpolation(scheme, equation)
+function interpolation(scheme, equation, target::Symbol)
+    points = target === :field ? scheme.field_points : scheme.material_points
+    offset = target === :field ? scheme.field_offset : scheme.material_offset
+    order = target === :field ? scheme.field_order : scheme.material_order
     return (
-        ptsSpace=1,
+        ptsSpace=points,
         ptsTime=1,
-        offsetSpace=(scheme.points_space - 1) / 2,
+        offsetSpace=offset,
         offsetTime=equation.has_time ? (scheme.points_time - 1) / 2 : 0.0,
-        YorderBspace=scheme.interpolation_order,
-        YorderBtime=equation.has_time ? scheme.interpolation_order : -1,
+        YorderBspace=order,
+        YorderBtime=-1,
     )
 end
 
@@ -88,11 +91,12 @@ function make_recipe(equation, scheme, dx; dt=nothing)
         "pointsInSpace" => scheme.points_space,
         "pointsInTime" => equation.has_time ? scheme.points_time : 1,
         "supplementaryOrder" => scheme.supplementary_order,
-        "fieldItpl" => interpolation(scheme, equation),
-        "materItpl" => interpolation(scheme, equation),
+        "fieldItpl" => interpolation(scheme, equation, :field),
+        "materItpl" => interpolation(scheme, equation, :material),
         "nuGeometryMode" => :middle,
         "hierarchicalTestFunctions" => false,
         "evenOrderHalfShiftMode" => :none,
+        "taylorInverseMode" => scheme.taylor_inverse_mode,
         "recipe_backend" => CPU(),
     )
     return makeOPTsemiSymbolic(params)["recette"]
@@ -147,6 +151,7 @@ function material_mapping(numeric, equation, scenario, x)
         mu, _ = material_value_gradient(scenario, :mu, spatial_x, d)
         lambda, _ = material_value_gradient(scenario, :lambda, spatial_x, d)
         velocity, _ = material_value_gradient(scenario, :velocity, spatial_x, d)
+        kappa, _ = material_value_gradient(scenario, :kappa, spatial_x, d)
         for variable_index in axes(numeric.lhs_varm, 1)
             symbol = numeric.lhs_varm[variable_index, local_index]
             text = string(symbol)
@@ -158,6 +163,8 @@ function material_mapping(numeric, equation, scenario, x)
                 mapping[symbol] = lambda
             elseif startswith(text, "v") || occursin("v(", text)
                 mapping[symbol] = velocity
+            elseif occursin("κ", text)
+                mapping[symbol] = kappa
             elseif occursin("ω", text)
                 mapping[symbol] = 0.8 * sqrt(BASE.mu / BASE.rho) *
                     norm(FIELD_WAVE[1:d])
@@ -178,8 +185,13 @@ function manufactured(equation, scenario, coordinates; branch=:P)
     mu, gradmu = material_value_gradient(scenario, :mu, x, d)
     lambda, gradlambda = material_value_gradient(scenario, :lambda, x, d)
     velocity, _ = material_value_gradient(scenario, :velocity, x, d)
+    kappa, gradkappa = material_value_gradient(scenario, :kappa, x, d)
 
-    if equation.physics == :sh_frequency
+    if equation.physics == :poisson
+        theta = dot(k, x)
+        u = [cos(theta)]
+        f = [-dot(gradkappa, k) * sin(theta) - kappa * k2 * cos(theta)]
+    elseif equation.physics == :sh_frequency
         theta = dot(k, x)
         omega = 0.8 * sqrt(BASE.mu / BASE.rho) * norm(k)
         u = [cos(theta)]
@@ -198,7 +210,15 @@ function manufactured(equation, scenario, coordinates; branch=:P)
         f = [(-omega^2 + velocity^2 * k2) * cos(theta)]
     elseif equation.physics == :elastic
         khat = k / norm(k)
-        p = branch == :P ? khat : [-khat[2], khat[1]]
+        if branch == :P
+            p = khat
+        elseif d == 2
+            p = [-khat[2], khat[1]]
+        else
+            reference = abs(khat[1]) < 0.8 ? [1.0, 0.0, 0.0] : [0.0, 1.0, 0.0]
+            s1 = normalize(cross(khat, reference))
+            p = branch == :S2 ? normalize(cross(khat, s1)) : s1
+        end
         speed = branch == :P ?
             sqrt((BASE.lambda + 2 * BASE.mu) / BASE.rho) :
             sqrt(BASE.mu / BASE.rho)
@@ -254,6 +274,7 @@ function residual_error(numeric, equation, scenario, n, dx, dt; branch=:P)
             mu, _ = material_value_gradient(scenario, :mu, point[1:d], d)
             lambda, _ = material_value_gradient(scenario, :lambda, point[1:d], d)
             velocity, _ = material_value_gradient(scenario, :velocity, point[1:d], d)
+            kappa, _ = material_value_gradient(scenario, :kappa, point[1:d], d)
             for variable_index in axes(numeric.lhs_varm, 1)
                 symbol = numeric.lhs_varm[variable_index, local_index]
                 text = string(symbol)
@@ -261,6 +282,7 @@ function residual_error(numeric, equation, scenario, n, dx, dt; branch=:P)
                     occursin("μ", text) ? mu :
                     occursin("λ", text) ? lambda :
                     (startswith(text, "v") || occursin("v(", text)) ? velocity :
+                    occursin("κ", text) ? kappa :
                     occursin("ω", text) ?
                         0.8 * sqrt(BASE.mu / BASE.rho) * norm(FIELD_WAVE[1:d]) :
                     1.0
@@ -356,11 +378,23 @@ function max_amplification(numeric, equation; samples=13)
                 maximum(abs.(amplification_roots(
                     numeric, equation, [theta], mapping))))
         end
-    else
+    elseif equation.space_dimension == 2
         for theta_x in angles, theta_y in angles
             maximum_modulus = max(maximum_modulus,
                 maximum(abs.(amplification_roots(
                     numeric, equation, [theta_x, theta_y], mapping))))
+        end
+    else
+        # A full cubic scan is prohibitively expensive for 3-D elastic
+        # recipes.  Axis, face-diagonal and body-diagonal rays expose the
+        # relevant isotropic extrema while keeping this a screening test.
+        directions = ([1.0, 0.0, 0.0],
+                      normalize([1.0, 1.0, 0.0]),
+                      normalize([1.0, 1.0, 1.0]))
+        for theta in angles, direction in directions
+            maximum_modulus = max(maximum_modulus,
+                maximum(abs.(amplification_roots(
+                    numeric, equation, theta .* direction, mapping))))
         end
     end
     return maximum_modulus
@@ -416,16 +450,19 @@ function dispersion_rows_for(equation, scheme, cfl; quick=false)
     ppws = quick ? [5.0, 8.0, 12.0, 20.0] :
         [4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 16.0, 24.0, 32.0]
     directions = equation.space_dimension == 1 ?
-        [(name="axis", unit=[1.0])] :
+        [(name="axis", unit=[1.0])] : equation.space_dimension == 2 ?
         [(name="axis", unit=[1.0, 0.0]),
-         (name="diagonal", unit=[inv(sqrt(2)), inv(sqrt(2))])]
-    branches = equation.physics == :elastic ? (:P, :S) : equation.branches
+         (name="diagonal", unit=[inv(sqrt(2)), inv(sqrt(2))])] :
+        [(name="axis", unit=[1.0, 0.0, 0.0]),
+         (name="face_diagonal", unit=normalize([1.0, 1.0, 0.0])),
+         (name="body_diagonal", unit=normalize([1.0, 1.0, 1.0]))]
+    branches = equation.branches
     rows = NamedTuple[]
     for direction in directions, ppw in ppws, branch in branches
         theta = 2pi / ppw
         spatial_angles = theta .* direction.unit
         roots = amplification_roots(numeric, equation, spatial_angles, mapping)
-        speed = branch == :S ? sqrt(BASE.mu / BASE.rho) :
+        speed = branch in (:S, :S1, :S2) ? sqrt(BASE.mu / BASE.rho) :
             branch == :P && equation.physics == :elastic ?
                 sqrt((BASE.lambda + 2 * BASE.mu) / BASE.rho) :
                 characteristic_speed(equation)
@@ -490,7 +527,7 @@ function run_convergence(equations, schemes; quick=false)
     timing_rows = NamedTuple[]
     for equation in equations, scheme in schemes
         scenarios = material_scenarios(equation)
-        branches = equation.physics == :elastic ? (:P, :S) : equation.branches
+        branches = equation.branches
         for n in selected_sizes(equation, quick)
             dx = 2pi / n
             dt = equation.has_time ? CFL_RUN * dx / characteristic_speed(equation) : nothing
@@ -565,7 +602,7 @@ function main()
                     scheme=scheme.name,
                 ), item))
             end
-            branches = equation.physics == :elastic ? (:P, :S) : equation.branches
+            branches = equation.branches
             for branch in branches
                 push!(cfl_rows, (
                     equation=equation.label, equation_id=equation.equation,

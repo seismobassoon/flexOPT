@@ -25,6 +25,11 @@ julia>  famousEquations("1Dacceleration")
 
 function famousEquations(name::AbstractString) 
     exprs,fields,vars,extexprs,extfields,extvars,coordinates,∂,∂²=famousEquation(Val(Symbol("eq_"*name)))
+    # `(x)` is just `x` in Julia, whereas `(x,)` is a one-element tuple.
+    # Several historical 1-D gallery entries use the former spelling.  Keep
+    # their public definitions working, but present one uniform coordinate
+    # container to the operator-construction code.
+    coordinates = coordinates isa Tuple ? coordinates : (coordinates,)
     equationCharacteristics=(exprs=exprs, fields=fields, vars=vars, coordinates=coordinates, ∂=∂, ∂²=∂²)
     equationCharacteristicsForce=(exprs=extexprs, fields=extfields, vars=extvars, coordinates=coordinates, ∂=∂, ∂²=∂²)
 
@@ -426,6 +431,29 @@ function famousEquation(::Val{:eq_3DsismoTimeIso})
     coordinates =(x,y,z,t)
     ∂, ∂² = usefulPartials(coordinates)
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
+end
+
+function famousEquation(::Val{:eq_3DsismoTimeIsoHeteroForce})
+    # Body-force form used by periodic manufactured-solution benchmarks.  The
+    # production moment-tensor form above remains unchanged.
+    @variables ρ(x,y,z) (C(x,y,z))[1:3,1:3,1:3,1:3]
+    @variables u(x,y,z,t)[1:3] F(x,y,z,t)[1:3]
+    @variables λ(x,y,z) μ(x,y,z)
+    δ = Matrix(I, 3, 3)
+    @tullio C[i,j,k,l] := λ * δ[i,j]*δ[k,l] +
+        μ*(δ[i,k]*δ[j,l] + δ[i,l]*δ[j,k])
+    @tullio traction[i] := ∇₃[j](C[i,j,k,l] * ∇₃[l](u[k]))
+
+    exprs = ntuple(i -> ρ * ∂t²(u[i]) - traction[i], 3)
+    fields = ntuple(i -> u[i], 3)
+    vars = (ρ, λ, μ)
+    extexprs = ntuple(i -> F[i], 3)
+    extfields = extexprs
+    extvars = extexprs
+    coordinates = (x, y, z, t)
+    ∂, ∂² = usefulPartials(coordinates)
+    return exprs, fields, vars, extexprs, extfields, extvars,
+        coordinates, ∂, ∂²
 end
 
 function famousEquation(::Val{:eq_highSchoolProblem})

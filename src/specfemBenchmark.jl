@@ -434,16 +434,17 @@ function run_specfem2d_case(case_directory; root=nothing)
         throw(ArgumentError("$case_path does not contain DATA/Par_file"))
     mesher_log = joinpath(case_path, "mesh.log")
     solver_log = joinpath(case_path, "solver.log")
-    open(mesher_log, "w") do io
+    mesher_wall_time_s = @elapsed open(mesher_log, "w") do io
         command = Cmd(Cmd([status.mesher]); dir=case_path)
         run(pipeline(command, stdout=io, stderr=io))
     end
-    open(solver_log, "w") do io
+    solver_wall_time_s = @elapsed open(solver_log, "w") do io
         command = Cmd(Cmd([status.solver]); dir=case_path)
         run(pipeline(command, stdout=io, stderr=io))
     end
     (; case_directory=case_path, output=joinpath(case_path, "OUTPUT_FILES"),
-       mesher_log, solver_log)
+       mesher_log, solver_log, mesher_wall_time_s, solver_wall_time_s,
+       total_wall_time_s=mesher_wall_time_s + solver_wall_time_s)
 end
 
 function read_specfem2d_trace(path; time_shift=0.0)

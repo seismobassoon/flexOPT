@@ -60,6 +60,42 @@ function _unique_derivative_orders(indices::Vector{Int})
     return result
 end
 
+const _commuting_terms_cache = Dict{Any,Any}()
+const _commuting_coefficient_cache = Dict{Any,Any}()
+const _commuting_cache_lock = ReentrantLock()
+
+_cartesian_orders(index) = Tuple(index[d] - 1 for d in 1:length(index))
+
+function _symbolic_operation(expression)
+    value = Symbolics.value(expression)
+    return try
+        Symbolics.operation(value)
+    catch
+        nothing
+    end
+end
+
+function _symbolic_arguments(expression)
+    value = Symbolics.value(expression)
+    return try
+        Symbolics.arguments(value)
+    catch
+        ()
+    end
+end
+
+"Maximum consecutive symbolic Differential depth applied to `field`."
+function _maximum_derivative_depth(expression, field, depth=0)
+    operation = _symbolic_operation(expression)
+    field_operation = _symbolic_operation(field)
+    operation == field_operation && return depth
+    arguments = _symbolic_arguments(expression)
+    isempty(arguments) && return -1
+    next_depth = operation isa Differential ? depth + 1 : 0
+    return maximum((_maximum_derivative_depth(argument, field, next_depth)
+                    for argument in arguments); init=-1)
+end
+
 """
 Return every symbolic nesting that represents one commuting mixed partial.
 
@@ -70,23 +106,41 @@ opposite order.  This was visible in 2-D elasticity as a missing λ or μ part o
 the `(λ + μ) ∂xy` coupling.
 """
 function commutingMixedPartialTerms(index, coordinates; field=identity)
+    key = (_cartesian_orders(index), Tuple(coordinates), field)
+    cached = lock(_commuting_cache_lock) do
+        get(_commuting_terms_cache, key, nothing)
+    end
+    cached === nothing || return cached
     derivative_indices = Int[]
     for dimension in eachindex(coordinates)
         append!(derivative_indices, fill(dimension, index[dimension] - 1))
     end
     partials = Differential.(coordinates)
-    return unique(map(_unique_derivative_orders(derivative_indices)) do order
+    terms = unique(map(_unique_derivative_orders(derivative_indices)) do order
         term = field
         for dimension in order
             term = partials[dimension](term)
         end
         term
     end)
+    lock(_commuting_cache_lock) do
+        _commuting_terms_cache[key] = terms
+    end
+    return terms
 end
 
 function _commuting_coefficient(expression, index, coordinates; field=identity)
-    sum(myCoeff(expression, term) for term in
-        commutingMixedPartialTerms(index, coordinates; field=field))
+    key = (expression, _cartesian_orders(index), Tuple(coordinates), field)
+    cached = lock(_commuting_cache_lock) do
+        get(_commuting_coefficient_cache, key, nothing)
+    end
+    cached === nothing || return cached
+    coefficient = sum(myCoeff(expression, term) for term in
+                      commutingMixedPartialTerms(index, coordinates; field=field))
+    lock(_commuting_cache_lock) do
+        _commuting_coefficient_cache[key] = coefficient
+    end
+    return coefficient
 end
 
 function varMmaker(maxPointsUsed,coordinates,vars,∂) 
@@ -133,12 +187,13 @@ function PDECoefFinder(orders,coordinates,expr,field,vars)
     alpha=[]
     
     maxPolynomialOrderMaterial = 2*(maximum(orders)-1)
-    ∇=makeMixPartials(orders,coordinates;field=field)
-    R=CartesianIndices(∇)
+    R=CartesianIndices(Tuple(orders))
     expr=mySimplify(expr)
+    maximumFieldDerivative = _maximum_derivative_depth(expr, field)
 
 
     for i in R
+        sum(_cartesian_orders(i)) > maximumFieldDerivative && continue
         # Mixed derivatives commute for the smooth fields represented here.
         # Sum every symbolic nesting because Symbolics does not canonicalise
         # Dx(Dy(field)) and Dy(Dx(field)) to the same expression.
@@ -147,9 +202,11 @@ function PDECoefFinder(orders,coordinates,expr,field,vars)
             isTmpCoeffAConstant=true
             for iVar in eachindex(vars)
                 
-                ∇m=makeMixPartials(orders,coordinates;field=vars[iVar]) # material partials
-                Rm=CartesianIndices(∇m)
+                Rm=CartesianIndices(Tuple(orders))
+                maximumMaterialDerivative =
+                    _maximum_derivative_depth(tmpCoeff, vars[iVar])
                 for j in Rm
+                    sum(_cartesian_orders(j)) > maximumMaterialDerivative && continue
                     tmpCoeffMaterial = _commuting_coefficient(
                         tmpCoeff, j, coordinates; field=vars[iVar])
                     
@@ -162,6 +219,9 @@ function PDECoefFinder(orders,coordinates,expr,field,vars)
                                 ∇n = makeMixPartials(orders,coordinates;field=vars[jVar]) 
                                 for jj in Rm
                                     if jj !== Rm[1]
+                                        sum(_cartesian_orders(jj)) >
+                                            _maximum_derivative_depth(
+                                                tmpCoeffMaterial, vars[jVar]) && continue
                                         differentialCoeff = _commuting_coefficient(
                                             tmpCoeffMaterial, jj, coordinates;
                                             field=vars[jVar])
