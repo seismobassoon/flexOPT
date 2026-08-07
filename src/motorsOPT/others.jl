@@ -46,6 +46,49 @@ function makeMixPartials(orders,coordinates;field=identity)
     return ∇
 end
 
+function _unique_derivative_orders(indices::Vector{Int})
+    isempty(indices) && return [Int[]]
+    result = Vector{Vector{Int}}()
+    for coordinate in unique(indices)
+        position = findfirst(==(coordinate), indices)
+        remaining = copy(indices)
+        deleteat!(remaining, position)
+        for suffix in _unique_derivative_orders(remaining)
+            push!(result, [coordinate; suffix])
+        end
+    end
+    return result
+end
+
+"""
+Return every symbolic nesting that represents one commuting mixed partial.
+
+Symbolics distinguishes `Dx(Dy(u))` from `Dy(Dx(u))` structurally, although
+the smooth fields used by OPT satisfy Clairaut's theorem.  Searching only the
+nesting produced by `makeMixPartials` silently loses PDE terms written in the
+opposite order.  This was visible in 2-D elasticity as a missing λ or μ part of
+the `(λ + μ) ∂xy` coupling.
+"""
+function commutingMixedPartialTerms(index, coordinates; field=identity)
+    derivative_indices = Int[]
+    for dimension in eachindex(coordinates)
+        append!(derivative_indices, fill(dimension, index[dimension] - 1))
+    end
+    partials = Differential.(coordinates)
+    return unique(map(_unique_derivative_orders(derivative_indices)) do order
+        term = field
+        for dimension in order
+            term = partials[dimension](term)
+        end
+        term
+    end)
+end
+
+function _commuting_coefficient(expression, index, coordinates; field=identity)
+    sum(myCoeff(expression, term) for term in
+        commutingMixedPartialTerms(index, coordinates; field=field))
+end
+
 function varMmaker(maxPointsUsed,coordinates,vars,∂) 
     # this will make an array of material coeffs for with a local Cartesian grid (max points used for a node)
     vars = _as_variable_tuple(vars)
@@ -96,9 +139,10 @@ function PDECoefFinder(orders,coordinates,expr,field,vars)
 
 
     for i in R
-        term_searched = ∇[i]
-
-        tmpCoeff = myCoeff(expr,term_searched)
+        # Mixed derivatives commute for the smooth fields represented here.
+        # Sum every symbolic nesting because Symbolics does not canonicalise
+        # Dx(Dy(field)) and Dy(Dx(field)) to the same expression.
+        tmpCoeff = _commuting_coefficient(expr, i, coordinates; field=field)
         if tmpCoeff !== 0
             isTmpCoeffAConstant=true
             for iVar in eachindex(vars)
@@ -106,8 +150,8 @@ function PDECoefFinder(orders,coordinates,expr,field,vars)
                 ∇m=makeMixPartials(orders,coordinates;field=vars[iVar]) # material partials
                 Rm=CartesianIndices(∇m)
                 for j in Rm
-                    term_material_searched = ∇m[j]
-                    tmpCoeffMaterial = myCoeff(tmpCoeff,term_material_searched)
+                    tmpCoeffMaterial = _commuting_coefficient(
+                        tmpCoeff, j, coordinates; field=vars[iVar])
                     
                     if tmpCoeffMaterial !==0
                         isTmpCoeffAConstant=false
@@ -118,8 +162,9 @@ function PDECoefFinder(orders,coordinates,expr,field,vars)
                                 ∇n = makeMixPartials(orders,coordinates;field=vars[jVar]) 
                                 for jj in Rm
                                     if jj !== Rm[1]
-                                        term_material_searched_plus = ∇n[jj]
-                                        differentialCoeff = myCoeff(tmpCoeffMaterial,term_material_searched_plus)
+                                        differentialCoeff = _commuting_coefficient(
+                                            tmpCoeffMaterial, jj, coordinates;
+                                            field=vars[jVar])
                                         if differentialCoeff !==0
                                             isOKtoinclude = false
                                         end
@@ -171,7 +216,7 @@ function TaylorCoefInversion(coefInversionDict::Dict)
     # be careful that pointsIndices is now a 1D array of integer vectors!!
 
     @unpack multiOrdersIndices, pointsIndices, μpointsIndices, Δ  = coefInversionDict
-    taylorInverseMode = Symbol(get(coefInversionDict, "taylor_inverse_mode", :scaled_svd))
+    taylorInverseMode = Symbol(get(coefInversionDict, "taylor_inverse_mode", :hierarchical_constrained))
 
 
     @show typeof(pointsIndices)
@@ -195,7 +240,7 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
 end
 
-function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μPoint; taylor_inverse_mode=:scaled_svd)
+function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μPoint; taylor_inverse_mode=:hierarchical_constrained)
 
 
     # the old version is : illposedTaylorCoefficientsInversionSingleCentre
@@ -225,7 +270,11 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     # This avoids forming normal equations A'A, which square the condition number
     # and can break x/y symmetry for high supplementaryOrder.
     A = Num2Float64.(tmpTaylorExpansionCoeffs)
-    tmpCˡηlocal = if taylor_inverse_mode == :scaled_svd
+    tmpCˡηlocal = if taylor_inverse_mode == :hierarchical_constrained
+        hierarchicalTaylorPseudoInverse(
+            A, multiOrdersIndices, pointsIndices,
+        )
+    elseif taylor_inverse_mode == :scaled_svd
         stableTaylorPseudoInverse(A)
     elseif taylor_inverse_mode == :moore_penrose_svd
         directTaylorPseudoInverse(A)
@@ -234,6 +283,86 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     end
 
     return tmpCˡηlocal
+end
+
+"""
+    hierarchicalTaylorPseudoInverse(A, multiOrdersIndices, pointsIndices)
+
+Construct a Taylor inverse that reproduces a downward-closed low-order
+polynomial space exactly. Higher Taylor coefficients are fitted only inside
+the null space of those exact constraints, so supplementary orders cannot
+alter constants, linear terms, pure second derivatives, or mixed second
+derivatives.
+
+For a three-point tensor stencil the exact space is the set of monomials of
+total degree at most two. This includes `x*z`, while retaining null-space
+degrees of freedom with which supplementary terms can improve the weak
+operator. The former unconstrained Moore-Penrose inverse mixed aliased
+monomials (`x^2` with `x^4`, and `x*z` with three higher-order aliases).
+"""
+function hierarchicalTaylorPseudoInverse(
+    A,
+    multiOrdersIndices,
+    pointsIndices;
+    rtol=sqrt(eps(Float64)),
+)
+    A = Matrix{Float64}(A)
+    order_indices = vec(collect(multiOrdersIndices))
+    length(order_indices) == size(A, 1) ||
+        throw(DimensionMismatch("Taylor order count does not match the rows of A"))
+
+    points = vec(collect(pointsIndices))
+    coordinate_dimension = length(first(points))
+    coordinate_counts = [
+        length(unique(point[d] for point in points))
+        for d in 1:coordinate_dimension
+    ]
+    active_dimensions = findall(>(1), coordinate_counts)
+    exact_total_degree = isempty(active_dimensions) ? 0 :
+        minimum(coordinate_counts[d] - 1 for d in active_dimensions)
+    total_degree(index) = sum(index[d] - 1 for d in active_dimensions)
+
+    exact_rows = findall(index -> total_degree(index) <= exact_total_degree,
+        order_indices)
+    supplementary_rows = setdiff(collect(axes(A, 1)), exact_rows)
+    Aexact = A[exact_rows, :]
+
+    rank_exact = rank(Aexact; rtol=rtol)
+    rank_exact == length(exact_rows) ||
+        throw(ArgumentError(
+            "the exact Taylor constraint space is rank deficient: " *
+            "rank=$rank_exact for $(length(exact_rows)) constraints",
+        ))
+
+    # C has dimensions (nodes, Taylor terms), so A*C is the Taylor-order
+    # reproduction matrix. First impose exact identity rows.
+    C = zeros(Float64, size(A, 2), size(A, 1))
+    C[:, exact_rows] .= directTaylorPseudoInverse(Aexact; rtol=rtol)
+
+    null_exact = nullspace(Aexact; rtol=rtol)
+    if !isempty(supplementary_rows) && size(null_exact, 2) > 0
+        Ahigh = A[supplementary_rows, :]
+        target_high = zeros(Float64, length(supplementary_rows), size(A, 1))
+        for (row, global_row) in enumerate(supplementary_rows)
+            target_high[row, global_row] = 1.0
+        end
+
+        # Corrections lie in null(Aexact); exact low-order reproduction is
+        # therefore invariant under the supplementary least-squares fit.
+        reduced = Ahigh * null_exact
+        residual = target_high - Ahigh * C
+        C .+= null_exact * directTaylorPseudoInverse(reduced; rtol=rtol) * residual
+    end
+
+    target_exact = zeros(Float64, length(exact_rows), size(A, 1))
+    for (row, global_row) in enumerate(exact_rows)
+        target_exact[row, global_row] = 1.0
+    end
+    exact_error = norm(Aexact * C - target_exact, Inf)
+    exact_error <= 1e3 * rtol ||
+        error("hierarchical Taylor constraints were not preserved; error=$exact_error")
+
+    return C
 end
 
 function directTaylorPseudoInverse(A; rtol=sqrt(eps(Float64)))

@@ -325,6 +325,47 @@ function famousEquation(::Val{:eq_2DsismoTimeIsoHeteroSingleForce})
     return exprs, fields, vars, extexprs, extfields, extvars, coordinates, ∂, ∂²
 end
 
+"""
+Explicit component form of the heterogeneous 2-D isotropic elastic equation.
+
+This is mathematically identical to `eq_2DsismoTimeIsoHeteroSingleForce`, but
+deliberately avoids the fourth-order elasticity tensor and `@tullio`.  It is
+useful for auditing the semi-symbolic OPT recipe because every λ and μ term is
+visible before `bigαFinder` constructs equation (54)'s material/field coupling.
+The coordinate named `y` is the notebook's vertical `z` coordinate.
+"""
+function famousEquation(::Val{:eq_2DsismoTimeIsoHeteroSingleForceExplicit})
+    @variables ρ(x,y) λ(x,y) μ(x,y)
+    @variables u(x,y,t)[1:2] f(x,y,t)[1:2]
+
+    ux, uz = u[1], u[2]
+
+    # ∇·σ in plane strain, written without implicit tensor contraction:
+    # σxx = (λ+2μ)∂x ux + λ∂y uz
+    # σxy = μ(∂y ux + ∂x uz)
+    # σyy = λ∂x ux + (λ+2μ)∂y uz
+    traction_x =
+        ∂x((λ + 2μ) * ∂x(ux) + λ * ∂y(uz)) +
+        ∂y(μ * (∂y(ux) + ∂x(uz)))
+    traction_z =
+        ∂x(μ * (∂y(ux) + ∂x(uz))) +
+        ∂y(λ * ∂x(ux) + (λ + 2μ) * ∂y(uz))
+
+    exprs = (
+        ρ * ∂t²(ux) - traction_x,
+        ρ * ∂t²(uz) - traction_z,
+    )
+    fields = (ux, uz)
+    vars = (ρ, λ, μ)
+    extexprs = (f[1], f[2])
+    extfields = (f[1], f[2])
+    extvars = (f[1], f[2])
+    coordinates = (x, y, t)
+    ∂, ∂² = usefulPartials(coordinates)
+    return exprs, fields, vars, extexprs, extfields, extvars,
+        coordinates, ∂, ∂²
+end
+
 function famousEquation(::Val{:eq_2DacousticTime})
     # 2D wave equation with double couple source
     @variables v(x,y)  u(x,y,t) f(x,y,t)

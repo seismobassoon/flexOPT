@@ -7,6 +7,7 @@ export write_specfem2d_tomography, write_specfem2d_interfaces
 export prepare_specfem2d_case
 export run_specfem2d_case, read_specfem2d_trace
 export find_specfem2d_traces
+export read_specfem2d_wavefield_dumps
 export make_specfem2d_snapshot_video
 export waveform_metrics, plot_solver_benchmark
 
@@ -161,6 +162,7 @@ function prepare_specfem2d_case(
     surface_z;
     root=nothing,
     source=(x=0.0, z=-2_000.0),
+    sources=nothing,
     receivers=range(first(x), last(x); length=5),
     duration=30.0,
     dt=0.001,
@@ -174,6 +176,9 @@ function prepare_specfem2d_case(
     nz_elements=max(4, cld(length(z) - 1, 4)),
     snapshot_interval_steps=100,
     snapshot_image_type=5,
+    output_wavefield_dumps=false,
+    wavefield_dump_type=1,
+    binary_wavefield_dumps=true,
 )
     status = specfem2d_status(; root)
     template = joinpath(
@@ -200,6 +205,7 @@ function prepare_specfem2d_case(
         ("title", "flexOPT FD3 OPT3 SPECFEM2D benchmark"),
         ("NPROC", "1"),
         ("NSTEP", string(ceil(Int, duration / dt))),
+        ("NSOURCES", string(isnothing(sources) ? 1 : length(sources))),
         ("DT", string(dt)),
         ("MODEL", "default"),
         ("TOMOGRAPHY_FILE", "./DATA/$(basename(tomography_file))"),
@@ -208,6 +214,9 @@ function prepare_specfem2d_case(
         ("NTSTEP_BETWEEN_OUTPUT_IMAGES", string(snapshot_interval_steps)),
         ("output_color_image", ".true."),
         ("imagetype_JPEG", string(snapshot_image_type)),
+        ("output_wavefield_dumps", output_wavefield_dumps ? ".true." : ".false."),
+        ("imagetype_wavefield_dumps", string(wavefield_dump_type)),
+        ("use_binary_for_wavefield_dumps", binary_wavefield_dumps ? ".true." : ".false."),
         ("USE_SNAPSHOT_NUMBER_IN_FILENAME", ".true."),
         ("output_postscript_snapshot", ".false."),
         ("USER_T0", "0.d0"),
@@ -243,13 +252,20 @@ function prepare_specfem2d_case(
     )
     write(joinpath(data_path, "Par_file"), par)
 
-    source_text = read(joinpath(template, "SOURCE"), String)
-    source_text = _set_parameter(source_text, "xs", source.x)
-    source_text = _set_parameter(source_text, "zs", source.z)
-    source_text = _set_parameter(source_text, "f0", f0)
-    source_text = _set_parameter(source_text, "source_type", 1)
-    source_text = _set_parameter(source_text, "anglesource", source_angle)
-    source_text = _set_parameter(source_text, "factor", source_factor)
+    source_template = read(joinpath(template, "SOURCE"), String)
+    source_specs = isnothing(sources) ?
+        [(x=source.x, z=source.z, weight=1.0)] : collect(sources)
+    isempty(source_specs) && throw(ArgumentError("sources cannot be empty"))
+    all(s -> hasproperty(s, :x) && hasproperty(s, :z) &&
+        hasproperty(s, :weight), source_specs) || throw(ArgumentError(
+        "each distributed source needs x, z and weight fields",
+    ))
+    all(s -> isfinite(s.x) && isfinite(s.z) && isfinite(s.weight),
+        source_specs) || throw(ArgumentError(
+        "distributed source coordinates and weights must be finite",
+    ))
+    isapprox(sum(s.weight for s in source_specs), 1.0; atol=1e-12) ||
+        throw(ArgumentError("distributed source weights must sum to one"))
     source_time_function_file = nothing
     # SPECFEM labels seismograms from -1.2/f0 for an external STF as well.
     # The external array itself starts at physical time zero, so consumers
@@ -273,12 +289,24 @@ function prepare_specfem2d_case(
                 println(io, time, " ", value)
             end
         end
-        source_text = _set_parameter(source_text, "time_function_type", 8)
-        source_text = _set_parameter(
-            source_text, "name_of_source_file",
-            "./DATA/$(basename(source_time_function_file))",
-        )
     end
+    source_blocks = map(source_specs) do spec
+        block = _set_parameter(source_template, "xs", spec.x)
+        block = _set_parameter(block, "zs", spec.z)
+        block = _set_parameter(block, "f0", f0)
+        block = _set_parameter(block, "source_type", 1)
+        block = _set_parameter(block, "anglesource", source_angle)
+        block = _set_parameter(block, "factor", source_factor * spec.weight)
+        if !isnothing(source_time_function)
+            block = _set_parameter(block, "time_function_type", 8)
+            block = _set_parameter(
+                block, "name_of_source_file",
+                "./DATA/$(basename(source_time_function_file))",
+            )
+        end
+        block
+    end
+    source_text = join(source_blocks, "\n")
     write(joinpath(data_path, "SOURCE"), source_text)
 
     (
@@ -292,6 +320,7 @@ function prepare_specfem2d_case(
         source_time_function_file,
         time_axis_shift=Float64(time_axis_shift),
         source_factor=Float64(source_factor),
+        source_specs,
         source_angle=Float64(source_angle),
         receiver_z=Float64(receiver_z),
         free_surface=Bool(free_surface),
@@ -300,7 +329,94 @@ function prepare_specfem2d_case(
         nz_elements,
         snapshot_interval_steps=Int(snapshot_interval_steps),
         snapshot_image_type=Int(snapshot_image_type),
+        output_wavefield_dumps=Bool(output_wavefield_dumps),
+        wavefield_dump_type=Int(wavefield_dump_type),
+        binary_wavefield_dumps=Bool(binary_wavefield_dumps),
     )
+end
+
+"""
+    read_specfem2d_wavefield_dumps(output; dt, time_axis_shift=0)
+
+Read binary P-SV vector dumps produced with `imagetype_wavefield_dumps=1`.
+The result has `ux` and `uz` arrays ordered `(x, z, time)`. This helper is
+restricted to the structured rectangular meshes generated by
+`prepare_specfem2d_case`.
+"""
+function read_specfem2d_wavefield_dumps(
+    output;
+    dt::Real,
+    time_axis_shift::Real=0.0,
+)
+    output_path = abspath(output)
+    grid_file = joinpath(output_path, "wavefield_grid_for_dumps.bin")
+    isfile(grid_file) || throw(ArgumentError(
+        "SPECFEM wavefield grid is missing: $grid_file. " *
+        "Rerun with output_wavefield_dumps=true.",
+    ))
+    grid_values = reinterpret(Float32, read(grid_file))
+    iseven(length(grid_values)) || error("invalid SPECFEM wavefield grid")
+    grid = reshape(grid_values, 2, :)
+    # Neighboring elements can write the same conceptual GLL coordinate with
+    # slightly different Float32 roundoff. Cluster those values before testing
+    # the tensor-product structure.
+    coordinate_tolerance = max(
+        Float64(maximum(grid[1, :]) - minimum(grid[1, :])),
+        Float64(maximum(grid[2, :]) - minimum(grid[2, :])),
+    ) * 1e-6
+    function clustered_axis(values)
+        ordered = sort!(Float64.(collect(values)))
+        clusters = Vector{Vector{Float64}}()
+        for value in ordered
+            if isempty(clusters) || value - last(last(clusters)) > coordinate_tolerance
+                push!(clusters, [value])
+            else
+                push!(last(clusters), value)
+            end
+        end
+        [sum(cluster) / length(cluster) for cluster in clusters]
+    end
+    x = clustered_axis(grid[1, :])
+    z = clustered_axis(grid[2, :])
+    length(x) * length(z) == size(grid, 2) || throw(ArgumentError(
+        "wavefield dump is not a complete tensor grid",
+    ))
+    nearest_axis_index(axis, value) = begin
+        upper = searchsortedfirst(axis, Float64(value))
+        upper <= 1 && return 1
+        upper > length(axis) && return length(axis)
+        abs(axis[upper] - value) < abs(axis[upper - 1] - value) ? upper : upper - 1
+    end
+    grid_indices = [(nearest_axis_index(x, grid[1, point]),
+        nearest_axis_index(z, grid[2, point])) for point in axes(grid, 2)]
+    length(unique(grid_indices)) == size(grid, 2) || throw(ArgumentError(
+        "clustered SPECFEM GLL coordinates still contain duplicate points",
+    ))
+    files = sort(filter(path -> occursin(r"wavefield\d+_\d+\.bin$", basename(path)),
+        readdir(output_path; join=true)))
+    isempty(files) && throw(ArgumentError(
+        "no binary SPECFEM wavefield dumps were found in $output_path",
+    ))
+    ux = Array{Float32}(undef, length(x), length(z), length(files))
+    uz = similar(ux)
+    steps = Vector{Int}(undef, length(files))
+    for (frame, file) in enumerate(files)
+        values = reinterpret(Float32, read(file))
+        length(values) == 2size(grid, 2) || error(
+            "unexpected vector count in $file",
+        )
+        vector_field = reshape(values, 2, :)
+        for point in axes(vector_field, 2)
+            ix, iz = grid_indices[point]
+            ux[ix, iz, frame] = vector_field[1, point]
+            uz[ix, iz, frame] = vector_field[2, point]
+        end
+        matched = match(r"wavefield(\d+)_\d+\.bin$", basename(file))
+        isnothing(matched) && error("cannot parse SPECFEM dump step from $file")
+        steps[frame] = parse(Int, matched.captures[1])
+    end
+    times = (steps .- 1) .* Float64(dt) .+ Float64(time_axis_shift)
+    return (; x, z, time=times, ux, uz, files)
 end
 
 """
@@ -415,6 +531,22 @@ function find_specfem2d_traces(output_directory; component::Symbol=:z)
         path -> endswith(basename(path), suffix),
         readdir(output_directory; join=true),
     )
+    # SPECFEM changes the channel prefix when seismotype/output conventions
+    # change (for example HXZ -> CXZ). Old files are not always removed by a
+    # new run. Keep only the channel family written most recently.
+    families = Dict{String,Vector{String}}()
+    for path in paths
+        fields = split(basename(path), '.')
+        channel = length(fields) >= 4 ? fields[3] : basename(path)
+        push!(get!(families, channel, String[]), path)
+    end
+    if length(families) > 1
+        channels = collect(keys(families))
+        newest_channel = argmax(
+            channel -> maximum(mtime, families[channel]), channels,
+        )
+        paths = families[newest_channel]
+    end
     sort!(paths; by=path -> begin
         fields = split(basename(path), '.')
         length(fields) >= 4 ? fields[2] : basename(path)

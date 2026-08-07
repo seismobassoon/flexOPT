@@ -94,7 +94,7 @@ function makeOPTsemiSymbolic(params::Dict)
     @unpack famousEquationType, Δ, orderBtime, orderBspace, pointsInSpace, pointsInTime, supplementaryOrder, fieldItpl, materItpl = params
     recipe_backend = _normalise_recipe_backend(_opt_paramget(params, :recipe_backend, _opt_paramget(params, :coefficient_backend, :auto)))
     nuGeometryMode = Symbol(_opt_paramget(params, :nuGeometryMode, :middle))
-    taylorInverseMode = Symbol(_opt_paramget(params, :taylorInverseMode, :scaled_svd))
+    taylorInverseMode = Symbol(_opt_paramget(params, :taylorInverseMode, :hierarchical_constrained))
     trialFunctionRefPoints = _opt_paramget(params, :trialFunctionRefPoints, nothing)
     hierarchicalTestFunctions = Bool(_opt_paramget(params, :hierarchicalTestFunctions, false))
     evenOrderHalfShiftMode =
@@ -146,17 +146,17 @@ function makeOPTsemiSymbolic(params::Dict)
     nConfigurations=size(nodes)[1]
     numbersOfTheSystem=(numbersOfTheSystemL=numbersOfTheSystemL,numbersOfTheSystemR=numbersOfTheSystemR,nConfigurations=nConfigurations)
     fieldNames=(fields=fields, extfields=extfields)
-    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem,fieldNames=fieldNames,Cˡη=Cˡη,CˡηForce=CˡηForce, testFunctionOrders=testFunctionOrders, testFunctionOffsets=testFunctionOffsets, hierarchicalTestFunctions=hierarchicalTestFunctions, evenOrderHalfShiftMode=evenOrderHalfShiftMode, recipe_backend=_recipe_backend_name(recipe_backend), recipe_backend_type=string(typeof(recipe_backend)))
+    recette=(lhs=lhs,rhs=rhs,nodes=nodes,centresIndices=centresIndices,numbersOfTheSystem=numbersOfTheSystem,fieldNames=fieldNames,Cˡη=Cˡη,CˡηForce=CˡηForce, testFunctionOrders=testFunctionOrders, testFunctionOffsets=testFunctionOffsets, hierarchicalTestFunctions=hierarchicalTestFunctions, evenOrderHalfShiftMode=evenOrderHalfShiftMode, taylorInverseMode=taylorInverseMode, recipe_backend=_recipe_backend_name(recipe_backend), recipe_backend_type=string(typeof(recipe_backend)))
     return @strdict(recette)
 
 end
 
 
-function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend, taylor_inverse_mode=:scaled_svd)
+function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend, taylor_inverse_mode=:hierarchical_constrained)
     return constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμ,configsTaylorμ,Δnum,bigα,varM;ImakeReport=ImakeReport, recipe_backend=recipe_backend, taylor_inverse_mode=taylor_inverse_mode)
 end
 
-function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend, taylor_inverse_mode=:scaled_svd, trial_function_ref_points=nothing, test_nu_offset=0.0, interpolation_offset=0.0)
+function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend, taylor_inverse_mode=:hierarchical_constrained, trial_function_ref_points=nothing, test_nu_offset=0.0, interpolation_offset=0.0)
     numberGeometries = configsTaylorμ.numberGeometries
     numberGeometries == configsTaylorμᶜ.numberGeometries ||
         throw(ArgumentError("field and material Taylor grids must expose the same ν geometries"))
@@ -192,7 +192,7 @@ function constructAmatrix(equationCharacteristics,numbersOfTheSystem,ordersForSp
     return Ajiννᶜ, results[1][2], results[1][3]
 end
 
-function _constructAmatrix_single(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend, taylor_inverse_mode=:scaled_svd, trial_function_ref_points=nothing, test_nu_offset=0.0, interpolation_offset=0.0)
+function _constructAmatrix_single(equationCharacteristics,numbersOfTheSystem,ordersForSplinesμ,configsTaylorμ,ordersForSplinesμᶜ,configsTaylorμᶜ,Δnum,bigα,varM;ImakeReport=true, recipe_backend=backend, taylor_inverse_mode=:hierarchical_constrained, trial_function_ref_points=nothing, test_nu_offset=0.0, interpolation_offset=0.0)
     
     # for the future develpments: ν can move but it's already more or less coded! look at pointν and nGeometry
 
@@ -273,13 +273,13 @@ function _constructAmatrix_single(equationCharacteristics,numbersOfTheSystem,ord
     @show typeof(μPoints), μPoints[1], typeof(pointsIndices)
 
     coefInversionDict = Dict{String,Any}(@strdict multiOrdersIndices pointsIndices μpointsIndices=μPoints Δ=Δnum)
-    coefInversionDict["pinv_version"] = string(taylor_inverse_mode)
+    coefInversionDict["pinv_version"] = "$(taylor_inverse_mode)_hierarchical_v1"
     coefInversionDict["taylor_inverse_mode"] = taylor_inverse_mode
     output=myProduceOrLoad(TaylorCoefInversion,coefInversionDict,"taylorCoefInv")
     Cˡη=output["CˡηGlobal"]
 
     coefInversionDict = Dict{String,Any}(@strdict multiOrdersIndices pointsIndices μpointsIndices=μᶜPoints Δ=Δnum)
-    coefInversionDict["pinv_version"] = string(taylor_inverse_mode)
+    coefInversionDict["pinv_version"] = "$(taylor_inverse_mode)_hierarchical_v1"
     coefInversionDict["taylor_inverse_mode"] = taylor_inverse_mode
     output=myProduceOrLoad(TaylorCoefInversion,coefInversionDict,"taylorCoefInv")
     Cˡηᶜ=output["CˡηGlobal"]
