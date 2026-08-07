@@ -36,6 +36,8 @@ module flexOPT
     include("../src/motorsOPT/famousEquations.jl")
     include("../src/motorsOPT/famousSourceFunctions.jl")
     include("../src/motorsOPT/famousBoundaryConditions.jl")
+    export CerjanBoundarySpec, BoundaryConditionSet, boundary_geometry
+    export cerjan_padding, famousBoundaryConditions
 
     # semi-symbolics operators to fully numerical operators
     #include("fullyNumericalOPT/makeCostFunctions.jl")
