@@ -56,7 +56,9 @@ end
 function slope_guide!(axis, panel_rows, order, fraction, color)
     isempty(panel_rows) && return
     xs = sort(unique(row.dx for row in panel_rows))
-    length(xs) < 2 && return
+    # With only two resolutions this is merely a segment, and its label tends
+    # to collide with the measured curves. Keep guides for proper series.
+    length(xs) < 3 && return
     x1, x2 = xs[1], xs[min(end, 3)]
     finite_errors = [row.absolute_error for row in panel_rows if row.absolute_error > 0]
     isempty(finite_errors) && return
@@ -93,7 +95,9 @@ function make_figure(rows, equations, filename; row_height=390)
                     markersize=10, linewidth=2.4)
             end
             slope_guide!(axis, panel_rows, 2, 0.18, :gray55)
-            slope_guide!(axis, panel_rows, 4, 0.035, :gray70)
+            # Separate the fourth-order reference vertically from O(2), even
+            # on panels whose measured curves span only one decade.
+            slope_guide!(axis, panel_rows, 4, 0.008, :gray70)
             axis.xreversed = true
         end
     end
@@ -122,6 +126,10 @@ seismic = [
     (label="Elastic time 3-D (P–S RMS)", id="3DsismoTimeIsoHeteroForce"),
 ]
 
-make_figure(rows, poisson, "systematic_poisson_absolute_errors")
-make_figure(rows, seismic, "systematic_elastic_absolute_errors"; row_height=410)
+available_equations = Set(String(row.equation_id) for row in rows)
+filter!(equation -> equation.id in available_equations, poisson)
+filter!(equation -> equation.id in available_equations, seismic)
+
+isempty(poisson) || make_figure(rows, poisson, "systematic_poisson_absolute_errors")
+isempty(seismic) || make_figure(rows, seismic, "systematic_elastic_absolute_errors"; row_height=410)
 println("Saved systematic figures in ", OUTPUT_DIR)

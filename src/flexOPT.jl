@@ -49,6 +49,7 @@ module flexOPT
     include("../src/numSolvers/timeMarchingSchemes.jl")
     include("../src/numSolvers/diffTools.jl")
     export prepareNumericalOperators,timeMarchingSchemePrepared,prepareLinearSystem,evaluateLinearSystem!,evaluateLinearSystem,timeMarchingSchemeLinear,propagateLinearSystem,overlapBoundaryLinearSystem
+    export prepareLumpedFuturePredictor,applyLumpedFuturePredictor!
 
 
     export quasiNumericalOperatorConstruction,constructingNumericalDiscretisedEquations
