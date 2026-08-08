@@ -127,22 +127,23 @@ end
 
 """
     overlapBoundaryLinearSystem(volume, boundary, points;
-        mode=:additive, boundary_weight=1.0)
+        mode=:replace, boundary_weight=1.0)
 
-Overlap rows assembled from an independent OPT boundary recipe with the
-volume operator at `points`. The default `:additive` mode preserves the
-dynamic volume equation and adds the boundary residual, as in a weak/FEM-like
-assembly. The default preserves the native OPT coefficient scale.
+Install rows assembled from an independent OPT boundary recipe at `points`.
+The default `:replace` mode is the physically appropriate choice when the
+boundary recipe already contains the weak PDE on the truncated domain: the
+ordinary interior row must not remain active and no separate traction equation
+is added to it. The default preserves the native OPT coefficient scale.
 `boundary_weight=:match_volume` is available as a conditioning diagnostic but
-can over-penalize the boundary in a time-marching problem. `mode=:replace` is retained only for
-diagnostics; replacing a second-order dynamic equation by a first-order
-traction equation can make the current-time matrix singular.
+can over-penalize the boundary in a time-marching problem. `mode=:additive` is
+retained only for genuinely additive constraints and must be requested
+explicitly; it is not a traction-free-surface treatment.
 """
 function overlapBoundaryLinearSystem(
     volume,
     boundary,
     points;
-    mode::Symbol=:additive,
+    mode::Symbol=:replace,
     boundary_weight=1.0,
 )
     volume.spaceShape == boundary.spaceShape ||

@@ -164,6 +164,7 @@ function prepare_specfem2d_case(
     source=(x=0.0, z=-2_000.0),
     sources=nothing,
     receivers=range(first(x), last(x); length=5),
+    receiver_points=nothing,
     duration=30.0,
     dt=0.001,
     f0=1.0,
@@ -211,6 +212,24 @@ function prepare_specfem2d_case(
     )
 
     par = read(joinpath(template, "Par_file"), String)
+    receiver_specs = isnothing(receiver_points) ?
+        [(x=Float64(xr), z=Float64(receiver_z)) for xr in receivers] :
+        [(x=Float64(point.x), z=Float64(point.z)) for point in receiver_points]
+    isempty(receiver_specs) && throw(ArgumentError("receiver list cannot be empty"))
+    all(point -> isfinite(point.x) && isfinite(point.z), receiver_specs) ||
+        throw(ArgumentError("receiver coordinates must be finite"))
+    stations_file = if isnothing(receiver_points)
+        nothing
+    else
+        path = joinpath(data_path, "STATIONS")
+        open(path, "w") do io
+            for (index, point) in enumerate(receiver_specs)
+                println(io, "S", lpad(index, 4, '0'), " FX ",
+                    point.x, " ", point.z, " 0.0 0.0")
+            end
+        end
+        path
+    end
     settings = (
         ("title", "flexOPT FD3 OPT3 SPECFEM2D benchmark"),
         ("NPROC", "1"),
@@ -231,11 +250,12 @@ function prepare_specfem2d_case(
         ("output_postscript_snapshot", ".false."),
         ("USER_T0", "0.d0"),
         ("nreceiversets", "1"),
-        ("nrec", string(length(receivers))),
-        ("xdeb", string(first(receivers))),
+        ("nrec", string(length(receiver_specs))),
+        ("xdeb", string(first(receiver_specs).x)),
         ("zdeb", string(receiver_z)),
-        ("xfin", string(last(receivers))),
+        ("xfin", string(last(receiver_specs).x)),
         ("zfin", string(receiver_z)),
+        ("use_existing_STATIONS", isnothing(stations_file) ? ".false." : ".true."),
         ("record_at_surface_same_vertical",
             record_at_surface_same_vertical ? ".true." : ".false."),
         ("interfacesfile", basename(interfaces_file)),
@@ -336,6 +356,8 @@ function prepare_specfem2d_case(
         source_factor=Float64(source_factor),
         source_specs,
         source_angle=Float64(source_angle),
+        receiver_points=receiver_specs,
+        stations_file,
         receiver_z=Float64(receiver_z),
         free_surface=Bool(free_surface),
         surface=surface_z,
@@ -448,6 +470,23 @@ function run_specfem2d_case(case_directory; root=nothing)
         throw(ArgumentError("$case_path does not contain DATA/Par_file"))
     mesher_log = joinpath(case_path, "mesh.log")
     solver_log = joinpath(case_path, "solver.log")
+    # SPECFEM does not remove seismograms from a preceding run.  Keeping those
+    # files makes a subsequent receiver configuration look as if it had extra
+    # stations, and stale wavefield dumps may belong to another mesh. Remove
+    # only generated time-series/snapshot products; mesh databases are left
+    # untouched.
+    output_directory = joinpath(case_path, "OUTPUT_FILES")
+    if isdir(output_directory)
+        for path in readdir(output_directory; join=true)
+            name = basename(path)
+            generated = occursin(
+                r"^[^.]+\.[^.]+\.[^.]+\.sem[avd]$", name,
+            ) || occursin(r"^wavefield[0-9]+_[0-9]+\.bin$", name) ||
+                occursin(r"^forward_(?:image|img)[0-9]+\.jpg$", name) ||
+                occursin(r"^SPECFEM2D_.*\.(?:mp4|gif)$", name)
+            generated && rm(path)
+        end
+    end
     mesher_wall_time_s = @elapsed open(mesher_log, "w") do io
         command = Cmd(Cmd([status.mesher]); dir=case_path)
         run(pipeline(command, stdout=io, stderr=io))
@@ -541,12 +580,22 @@ Return one SPECFEM2D ASCII velocity trace per station. SPECFEM uses different
 channel prefixes depending on the output convention (`CXZ`, `FXZ`, ...), so
 selection is based on the physical final component rather than a fixed prefix.
 """
-function find_specfem2d_traces(output_directory; component::Symbol=:z)
+function find_specfem2d_traces(
+    output_directory;
+    component::Symbol=:z,
+    network::Union{Nothing,AbstractString}=nothing,
+    stations::Union{Nothing,AbstractVector{<:AbstractString}}=nothing,
+)
     component in (:x, :z) ||
         throw(ArgumentError("SPECFEM2D component must be :x or :z"))
     suffix = component === :x ? "XX.semv" : "XZ.semv"
     paths = filter(
-        path -> endswith(basename(path), suffix),
+        path -> begin
+            fields = split(basename(path), '.')
+            endswith(basename(path), suffix) &&
+                (isnothing(network) || (!isempty(fields) && fields[1] == network)) &&
+                (isnothing(stations) || (length(fields) >= 2 && fields[2] in stations))
+        end,
         readdir(output_directory; join=true),
     )
     # SPECFEM changes the channel prefix when seismotype/output conventions

@@ -2,6 +2,155 @@
 timeDimensionString="t" 
 
 _as_variable_tuple(vars) = vars === nothing ? () : vars
+
+"A volume contribution paired with a derivative of the OPT test function."
+struct WeakTerm{E,N}
+    expression::E
+    test_derivative_orders::NTuple{N,Int}
+end
+
+"A physical flux on the right-hand side of the variational boundary integral."
+struct BoundaryFlux{E,N}
+    expression::E
+    normal_coordinate::Int
+    test_derivative_orders::NTuple{N,Int}
+end
+
+_weak_operation(expression) = try
+    Symbolics.operation(Symbolics.value(expression))
+catch
+    nothing
+end
+
+_weak_arguments(expression) = try
+    Symbolics.arguments(Symbolics.value(expression))
+catch
+    ()
+end
+
+function _weak_additive_terms(expression)
+    _weak_operation(expression) === (+) || return Any[expression]
+    return reduce(vcat, (_weak_additive_terms(argument) for argument in
+                         _weak_arguments(expression)); init=Any[])
+end
+
+function _numeric_factor_and_outer_derivative(term)
+    operation = _weak_operation(term)
+    if operation isa Differential
+        arguments = _weak_arguments(term)
+        length(arguments) == 1 || return nothing
+        return (coefficient=1, differential=operation, flux=arguments[1])
+    elseif operation === (*)
+        arguments = collect(_weak_arguments(term))
+        derivative_positions = findall(argument ->
+            _weak_operation(argument) isa Differential, arguments)
+        length(derivative_positions) == 1 || return nothing
+        position = only(derivative_positions)
+        coefficient_factors = deleteat!(copy(arguments), position)
+        all(factor -> Symbolics.value(factor) isa Number,
+            coefficient_factors) || return nothing
+        derivative_term = arguments[position]
+        derivative_arguments = _weak_arguments(derivative_term)
+        length(derivative_arguments) == 1 || return nothing
+        coefficient = prod(Symbolics.value(factor) for factor in
+                           coefficient_factors; init=1)
+        return (
+            coefficient=coefficient,
+            differential=_weak_operation(derivative_term),
+            flux=derivative_arguments[1],
+        )
+    end
+    return nothing
+end
+
+function _coordinate_index(variable, coordinates)
+    target = Symbolics.value(variable)
+    return findfirst(coordinate ->
+        isequal(Symbolics.value(coordinate), target), coordinates)
+end
+
+"""
+    naturalWeakForm(equationCharacteristics)
+
+Convert only explicit *outer spatial divergences* in the symbolic strong
+residual into volume terms containing derivatives of the test function.  Time
+derivatives remain on the unknown field.  Boundary fluxes are reported with
+the sign they have on the right-hand side of the variational equation.
+
+The transformation is deliberately conservative: an expression such as
+`a * Dx(q)` is transformed only when `a` is a numerical constant.  A
+spatially varying factor outside `Dx` is not silently interpreted as part of
+the flux.
+"""
+function naturalWeakForm(equationCharacteristics)
+    (; exprs, coordinates) = equationCharacteristics
+    expressions = exprs isa Tuple ? exprs : (exprs,)
+    coordinate_tuple = Tuple(coordinates)
+    ncoordinates = length(coordinate_tuple)
+    time_index = findfirst(coordinate ->
+        string(coordinate) == timeDimensionString, coordinate_tuple)
+    zero_orders = ntuple(_ -> 0, ncoordinates)
+
+    volume_terms = map(expressions) do expression
+        terms = WeakTerm[]
+        for additive_term in _weak_additive_terms(expression)
+            outer = _numeric_factor_and_outer_derivative(additive_term)
+            coordinate_index = isnothing(outer) ? nothing :
+                _coordinate_index(outer.differential.x, coordinate_tuple)
+            if isnothing(outer) || isnothing(coordinate_index) ||
+               coordinate_index == time_index
+                push!(terms, WeakTerm(additive_term, zero_orders))
+            else
+                derivative_orders = ntuple(d -> d == coordinate_index ? 1 : 0,
+                                            ncoordinates)
+                # ∫ W c ∂j(q) = -∫ (∂jW) c q + ∮ W c q n_j.
+                push!(terms, WeakTerm(
+                    -outer.coefficient * outer.flux,
+                    derivative_orders,
+                ))
+            end
+        end
+        terms
+    end
+
+    boundary_fluxes = map(expressions) do expression
+        fluxes = BoundaryFlux[]
+        for additive_term in _weak_additive_terms(expression)
+            outer = _numeric_factor_and_outer_derivative(additive_term)
+            isnothing(outer) && continue
+            coordinate_index = _coordinate_index(
+                outer.differential.x, coordinate_tuple)
+            (isnothing(coordinate_index) || coordinate_index == time_index) &&
+                continue
+            # Move the integration-by-parts boundary contribution to the RHS.
+            push!(fluxes, BoundaryFlux(
+                -outer.coefficient * outer.flux,
+                coordinate_index,
+                zero_orders,
+            ))
+        end
+        fluxes
+    end
+
+    return (
+        volume_terms=volume_terms,
+        boundary_fluxes=boundary_fluxes,
+        coordinates=coordinate_tuple,
+        time_coordinate=time_index,
+    )
+end
+
+function weakTermGroups(weak_form)
+    n_equations = length(weak_form.volume_terms)
+    groups = Dict{Any,Vector{Any}}()
+    for (equation, terms) in enumerate(weak_form.volume_terms), term in terms
+        expressions = get!(groups, term.test_derivative_orders) do
+            Any[0 for _ in 1:n_equations]
+        end
+        expressions[equation] += term.expression
+    end
+    return groups
+end
 # if the user does not want to use "t" for the time marching scheme, it should be changed
 # and this "t" should be the last element in coordinates
 
@@ -277,6 +426,7 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     @unpack multiOrdersIndices, pointsIndices, μpointsIndices, Δ  = coefInversionDict
     taylorInverseMode = Symbol(get(coefInversionDict, "taylor_inverse_mode", :hierarchical_constrained))
+    exactTaylorTotalDegree = get(coefInversionDict, "exact_taylor_total_degree", nothing)
 
 
     @show typeof(pointsIndices)
@@ -293,14 +443,14 @@ function TaylorCoefInversion(coefInversionDict::Dict)
 
     for μ_oneD in axes(CˡηGlobal,3)
         #@show typeof(multiOrdersIndices),typeof(pointsIndices)
-        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μpointsIndices[μ_oneD]; taylor_inverse_mode=taylorInverseMode)
+        CˡηGlobal[:,:,μ_oneD]=TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μpointsIndices[μ_oneD]; taylor_inverse_mode=taylorInverseMode, exact_total_degree=exactTaylorTotalDegree)
     end 
 
     return @strdict(CˡηGlobal)
 
 end
 
-function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μPoint; taylor_inverse_mode=:hierarchical_constrained)
+function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIndices,Δ,μPoint; taylor_inverse_mode=:hierarchical_constrained, exact_total_degree=nothing)
 
 
     # the old version is : illposedTaylorCoefficientsInversionSingleCentre
@@ -332,7 +482,14 @@ function TaylorCoefInversion(numberOfLs,numberOfEtas,multiOrdersIndices,pointsIn
     A = Num2Float64.(tmpTaylorExpansionCoeffs)
     tmpCˡηlocal = if taylor_inverse_mode == :hierarchical_constrained
         hierarchicalTaylorPseudoInverse(
-            A, multiOrdersIndices, pointsIndices,
+            A, multiOrdersIndices, pointsIndices;
+            exact_total_degree=exact_total_degree,
+        )
+    elseif taylor_inverse_mode == :weak_operator_optimized
+        hierarchicalTaylorPseudoInverse(
+            A, multiOrdersIndices, pointsIndices;
+            exact_total_degree=exact_total_degree,
+            supplementary_objective=:weak_moments,
         )
     elseif taylor_inverse_mode == :scaled_svd
         stableTaylorPseudoInverse(A)
@@ -365,6 +522,8 @@ function hierarchicalTaylorPseudoInverse(
     multiOrdersIndices,
     pointsIndices;
     rtol=sqrt(eps(Float64)),
+    exact_total_degree=nothing,
+    supplementary_objective=:uniform,
 )
     A = Matrix{Float64}(A)
     order_indices = vec(collect(multiOrdersIndices))
@@ -378,12 +537,40 @@ function hierarchicalTaylorPseudoInverse(
         for d in 1:coordinate_dimension
     ]
     active_dimensions = findall(>(1), coordinate_counts)
-    exact_total_degree = isempty(active_dimensions) ? 0 :
-        minimum(coordinate_counts[d] - 1 for d in active_dimensions)
+    requested_degree = isnothing(exact_total_degree) ?
+        (isempty(active_dimensions) ? 0 :
+            minimum(coordinate_counts[d] - 1 for d in active_dimensions)) :
+        Int(exact_total_degree)
+    requested_degree >= 0 ||
+        throw(ArgumentError("exact Taylor total degree must be nonnegative"))
     total_degree(index) = sum(index[d] - 1 for d in active_dimensions)
 
-    exact_rows = findall(index -> total_degree(index) <= exact_total_degree,
-        order_indices)
+    # Add low-order monomials in degree order, retaining only independent
+    # rows whose direct predecessors are already present.  A clipped 3×2
+    # stencil can therefore preserve x² and xz while correctly rejecting z².
+    candidates = sort(
+        findall(index -> total_degree(index) <= requested_degree, order_indices);
+        by=row -> (total_degree(order_indices[row]), Tuple(order_indices[row])),
+    )
+    exact_rows = Int[]
+    selected_orders = Set{Tuple}()
+    current_rank = 0
+    for row in candidates
+        exponent = Tuple(order_indices[row][d] - 1 for d in 1:coordinate_dimension)
+        predecessors_present = all(1:coordinate_dimension) do d
+            exponent[d] == 0 || begin
+                predecessor = ntuple(k -> exponent[k] - (k == d), coordinate_dimension)
+                predecessor in selected_orders
+            end
+        end
+        predecessors_present || continue
+        trial_rows = [exact_rows; row]
+        trial_rank = rank(A[trial_rows, :]; rtol=rtol)
+        trial_rank > current_rank || continue
+        push!(exact_rows, row)
+        push!(selected_orders, exponent)
+        current_rank = trial_rank
+    end
     supplementary_rows = setdiff(collect(axes(A, 1)), exact_rows)
     Aexact = A[exact_rows, :]
 
@@ -411,7 +598,26 @@ function hierarchicalTaylorPseudoInverse(
         # therefore invariant under the supplementary least-squares fit.
         reduced = Ahigh * null_exact
         residual = target_high - Ahigh * C
-        C .+= null_exact * directTaylorPseudoInverse(reduced; rtol=rtol) * residual
+        if supplementary_objective === :uniform
+            C .+= null_exact * directTaylorPseudoInverse(reduced; rtol=rtol) * residual
+        elseif supplementary_objective === :weak_moments
+            # This objective is intrinsic to Taylor consistency: lower total
+            # degree moments, which enter a compact weak operator first, carry
+            # more weight. A small null-space penalty selects a stable member
+            # of the constrained family. No external FD/Takeuchi coefficients
+            # are used as a target.
+            degrees = Float64[total_degree(order_indices[row]) for row in supplementary_rows]
+            weights = 1.0 ./ (1.0 .+ degrees).^2
+            weighted_reduced = weights .* reduced
+            weighted_residual = weights .* residual
+            ridge = sqrt(eps(Float64)) * max(opnorm(weighted_reduced), 1.0)
+            augmented = [weighted_reduced; ridge .* Matrix{Float64}(I, size(reduced, 2), size(reduced, 2))]
+            augmented_residual = [weighted_residual; zeros(size(reduced, 2), size(residual, 2))]
+            correction = directTaylorPseudoInverse(augmented; rtol=rtol) * augmented_residual
+            C .+= null_exact * correction
+        else
+            throw(ArgumentError("unknown supplementary objective: $supplementary_objective"))
+        end
     end
 
     target_exact = zeros(Float64, length(exact_rows), size(A, 1))
@@ -505,16 +711,50 @@ function numbersOfTheExpression(equationCharacteristics,
     Ndimension = length(coordinates)
 
     # 🔥 cleaner + no broadcast
-    pointsUsed   = fill(pointsInSpace, Ndimension)
-    pointsμUsed  = fill(pointsμInSpace, Ndimension)
-    offsetsμUsed = fill(Float64(offsetμInΔyInSpace), Ndimension)
-
-    if timeMarching
-        pointsUsed[end]   = pointsInTime
-        pointsμUsed[end]  = pointsμInTime
-        offsetsμUsed[end] = Float64(offsetμInΔyInTime)
+    nSpatial = timeMarching ? Ndimension - 1 : Ndimension
+    spatialPoints = if pointsInSpace isa Integer
+        fill(Int(pointsInSpace), nSpatial)
+    else
+        values = Int.(collect(pointsInSpace))
+        length(values) == nSpatial || throw(DimensionMismatch(
+            "pointsInSpace must contain one value per spatial coordinate",
+        ))
+        values
     end
+    all(>(0), spatialPoints) ||
+        throw(ArgumentError("all spatial point counts must be positive"))
+    pointsUsed = timeMarching ? [spatialPoints; Int(pointsInTime)] : spatialPoints
 
+    # Interpolation grids may follow the actual local geometry.  In
+    # particular, a clipped surface stencil is 3×2 in space and must not be
+    # represented by a fictitious scalar 3×3 interpolation grid.
+    spatialInterpolationPoints = if pointsμInSpace isa Integer
+        fill(Int(pointsμInSpace), nSpatial)
+    else
+        values = Int.(collect(pointsμInSpace))
+        length(values) == nSpatial || throw(DimensionMismatch(
+            "field/material ptsSpace must contain one value per spatial coordinate",
+        ))
+        values
+    end
+    all(>(0), spatialInterpolationPoints) || throw(ArgumentError(
+        "all field/material spatial interpolation point counts must be positive",
+    ))
+    spatialInterpolationOffsets = if offsetμInΔyInSpace isa Real
+        fill(Float64(offsetμInΔyInSpace), nSpatial)
+    else
+        values = Float64.(collect(offsetμInΔyInSpace))
+        length(values) == nSpatial || throw(DimensionMismatch(
+            "field/material offsetSpace must contain one value per spatial coordinate",
+        ))
+        values
+    end
+    pointsμUsed = timeMarching ?
+        [spatialInterpolationPoints; Int(pointsμInTime)] :
+        spatialInterpolationPoints
+    offsetsμUsed = timeMarching ?
+        [spatialInterpolationOffsets; Float64(offsetμInΔyInTime)] :
+        spatialInterpolationOffsets
 
     return (
         timeMarching = timeMarching,
@@ -632,6 +872,20 @@ function _investigateDependencies(::Val{N},
     if timeMarching && car2vec(multiPointsIndices[end])[end] > 1
         tmpVec[end] = car2vec(multiPointsIndices[end])[end] - 1
     end
+    requestedCentre = hasproperty(trialFunctionsCharacteristics, :nuCentre) ?
+        trialFunctionsCharacteristics.nuCentre : nothing
+    if !isnothing(requestedCentre)
+        centre = Int.(collect(requestedCentre))
+        if timeMarching && length(centre) == N - 1
+            push!(centre, tmpVec[end])
+        end
+        length(centre) == N || throw(DimensionMismatch(
+            "nuCentre must contain one value per spatial coordinate",
+        ))
+        all(d -> 1 <= centre[d] <= size(pointsInSpaceTime, d), eachindex(centre)) ||
+            throw(ArgumentError("nuCentre lies outside the local stencil"))
+        tmpVec .= centre
+    end
     middleν = vec2car(tmpVec)
     nuGeometryMode = hasproperty(trialFunctionsCharacteristics, :nuGeometryMode) ?
         trialFunctionsCharacteristics.nuGeometryMode : :middle
@@ -640,7 +894,7 @@ function _investigateDependencies(::Val{N},
         if timeMarching
             # Move ν through every spatial position, while retaining the
             # established time level used to define one marching step.
-            [I for I in multiPointsIndices if I[end] == middleν[end]]
+            [I for I in multiPointsIndices if I[N] == middleν[N]]
         else
             collect(multiPointsIndices)
         end
@@ -706,6 +960,9 @@ function _investigateDependencies(::Val{N},
         centrePointConfigurations = centrePointConfigurations,
         availableμPoints = availableμPoints,
         availableμaxes = availableμaxes,
+        exactTaylorTotalDegree = hasproperty(
+            trialFunctionsCharacteristics, :exactTaylorTotalDegree,
+        ) ? trialFunctionsCharacteristics.exactTaylorTotalDegree : nothing,
     )
 
     return dependencies, ordersForSplines, configsTaylor

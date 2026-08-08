@@ -16,6 +16,25 @@ module flexOPT
         getfield(Main, :makeGPUarray) :
         ((selected_backend, array) -> Adapt.adapt(selected_backend, array))
 
+    """
+    Global default formulation used by `makeOPTsemiSymbolic` when the recipe
+    parameters do not contain `variationalForm`.
+
+    Use `set_default_form!` rather than assigning a new value to this constant.
+    """
+    const DEFAULT_FORM = Ref{Symbol}(:weak)
+
+    function set_default_form!(form::Symbol)
+        normalised = Symbol(lowercase(String(form)))
+        normalised in (:weak, :strong) ||
+            throw(ArgumentError("form must be :weak or :strong"))
+        DEFAULT_FORM[] = normalised
+        return normalised
+    end
+
+    set_default_form!(form::AbstractString) = set_default_form!(Symbol(form))
+    export DEFAULT_FORM, set_default_form!
+
 
     # wrapping functions
 
@@ -32,7 +51,13 @@ module flexOPT
     # famous equations etc.
 
     include("../src/motorsOPT/others.jl")
-    export timeDimensionString
+    export timeDimensionString, WeakTerm, BoundaryFlux
+    export naturalWeakForm, weakTermGroups
+    include("../src/motorsOPT/nondimensionalisation.jl")
+    export opt_nondimensionalization, isotropic_elasticity_tensor
+    export nondimensionalize_elasticity_tensor, nondimensionalize_body_force
+    export nondimensionalize_moment_tensor, prepare_nondimensional_recipe
+    export prepare_nondimensional_elasticity, elasticity_component_models
     include("../src/motorsOPT/famousEquations.jl")
     include("../src/motorsOPT/famousSourceFunctions.jl")
     include("../src/motorsOPT/famousBoundaryConditions.jl")

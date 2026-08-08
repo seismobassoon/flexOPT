@@ -30,7 +30,10 @@ const WAVE_EQUATIONS = EQUATIONS
 const FIELD_WAVE = (2.0, 1.0, 1.0)
 const BASE = (rho=2.0, mu=3.0, lambda=4.0, velocity=2.0, kappa=2.5)
 const CFL_RUN = 0.18
-const SCHEMA_VERSION = "wave_periodic_fd_opt_v2"
+const SCHEMA_VERSION = "wave_periodic_fd_opt_v3_form_audited"
+const BENCHMARK_FORM = Symbol(lowercase(get(ENV, "FLEXOPT_WAVE_FORM", "weak")))
+BENCHMARK_FORM in (:weak, :strong) ||
+    error("FLEXOPT_WAVE_FORM must be weak or strong")
 const SYSTEMATIC_SCENARIOS = Set((
     "homogeneous",
     "same_wave_phase0",
@@ -89,6 +92,11 @@ function make_recipe(equation, scheme, dx; dt=nothing)
     deltas = equation.has_time ?
         Tuple(vcat(fill(Float64(dx), equation.space_dimension), Float64(dt))) :
         Tuple(fill(Float64(dx), equation.space_dimension))
+    # A box-car test (orderB=-1) has a distributional derivative and cannot be
+    # passed through the natural-weak WYYKK volume integral.  convFD therefore
+    # remains the same strong reference in both campaigns; the form comparison
+    # applies to the differentiable OPT test functions.
+    recipe_form = scheme.family === :convFD ? :strong : BENCHMARK_FORM
     params = Dict{String,Any}(
         "famousEquationType" => equation.equation,
         "Δ" => deltas,
@@ -104,6 +112,8 @@ function make_recipe(equation, scheme, dx; dt=nothing)
         "evenOrderHalfShiftMode" => :none,
         "taylorInverseMode" => scheme.taylor_inverse_mode,
         "recipe_backend" => CPU(),
+        # Never let a benchmark depend silently on the mutable package default.
+        "variationalForm" => recipe_form,
     )
     return makeOPTsemiSymbolic(params)["recette"]
 end
@@ -677,6 +687,8 @@ function run_convergence(equations, schemes; quick=false)
             push!(timing_rows, (
                 equation=equation.label, equation_id=equation.equation,
                 scheme=scheme.name, n, dx,
+                form=String(is_explicit ? :explicit :
+                    (scheme.family === :convFD ? :strong_reference : BENCHMARK_FORM)),
                 local_space_time_points=local_points,
                 recipe_seconds,
                 symbol_application_seconds=application_seconds,
@@ -708,6 +720,8 @@ function run_convergence(equations, schemes; quick=false)
                 push!(rows, (
                     equation=equation.label, equation_id=equation.equation,
                     physics=String(equation.physics), scheme=scheme.name,
+                    form=String(is_explicit ? :explicit :
+                        (scheme.family === :convFD ? :strong_reference : BENCHMARK_FORM)),
                     family=String(scheme.family), scenario=scenario.name,
                     relation=String(scenario.relation), branch=branch_label,
                     n, dx, dt=equation.has_time ? dt : NaN,
@@ -729,8 +743,10 @@ function main()
     output_dir = joinpath(FLEXOPT_ROOT, "scripts", "tmp",
         "famous_equation_periodic_benchmarks")
     mkpath(output_dir)
+    form_suffix = String(BENCHMARK_FORM)
     output_file = joinpath(output_dir, quick ?
-        "wave_fd_vs_opt_quick.jld2" : "wave_fd_vs_opt.jld2")
+        "wave_fd_vs_opt_$(form_suffix)_quick.jld2" :
+        "wave_fd_vs_opt_$(form_suffix).jld2")
     resume = get(ENV, "FLEXOPT_WAVE_RESUME", "1") == "1"
     if skip_convergence && isfile(output_file)
         previous = load(output_file)
@@ -759,6 +775,7 @@ function main()
                 # a later high-dimensional recette is interrupted.
                 jldsave(output_file;
                     schema_version=SCHEMA_VERSION,
+                    variational_form=String(BENCHMARK_FORM),
                     convergence_rows,
                     timing_rows,
                     completed_equations=sort!(collect(completed_equations)),
@@ -797,6 +814,7 @@ function main()
 
     jldsave(output_file;
         schema_version=SCHEMA_VERSION,
+        variational_form=String(BENCHMARK_FORM),
         convergence_rows,
         timing_rows,
         cfl_rows,

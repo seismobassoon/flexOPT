@@ -302,7 +302,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
     )
 
     @unpack νWhole, νGeometry, νRelative, localPointsIndices,
-        ModelPoints, Models, maskingField, conv,
+        ModelPoints, Models, maskingField, testFunctionMask, conv,
         timePointsUsedForOneStep, activeTimePoints, wholeMin, wholeMax,
         modelMin, modelDomainMax, wholeRegionPointsSpace = numericalGeometry
 
@@ -339,6 +339,7 @@ function numericalOperatorConstruction(optRec,modelFam,side;absorbingBoundaries=
 
     for iTestFunctions in eachindex(νWhole)
         νtmpWhole = νWhole[iTestFunctions]
+        testFunctionMask[νtmpWhole] || continue
         iGeometry = νGeometry[iTestFunctions]
         localPointsHere = localPointsIndices[iGeometry]
         middlepointHere = νRelative[iTestFunctions]
@@ -1031,20 +1032,22 @@ function prepareNumericalOperatorGeometry(
 
     #region making a maskingField (for limited source areas, boundary conditions, etc.)
 
-    maskingField=Array{Any,newD-1}(undef,Tuple(wholeRegionPointsSpace)) # maskingField is defined only for whole domain
+    maskingField=Array{Any,newD-1}(undef,Tuple(wholeRegionPointsSpace)) # field-column mask
+    testFunctionMask = trues(Tuple(wholeRegionPointsSpace)) # residual-row mask
     champsLimité = nothing
+    maskingField .= 1.0
     if maskedRegionInSpace === nothing
-        maskingField .= 1.0
+        # Every test function and every field column is active.
     elseif maskedRegionInSpace isa AbstractVector{<:CartesianIndex}
         # A spatial mask is also used to assemble boundary-only operators.
         # It must not imply a restricted source field: the symbolic RHS fields
         # are constructed later, outside this geometry routine.  In particular,
         # there is no `場` binding here to copy from.  Keep `champsLimité`
         # unset and let the mask select the operator rows only.
-        maskingField .= 0.0
+        testFunctionMask .= false
         for iSpace in maskedRegionInSpace
             jSpace = conv.model2whole(iSpace)
-            maskingField[jSpace] = 1.0
+            testFunctionMask[jSpace] = true
         end
     else
         throw(ArgumentError(
@@ -1075,6 +1078,7 @@ function prepareNumericalOperatorGeometry(
     ModelPoints=ModelPoints,
     geometryPreference=geometryPreference,
     maskingField=maskingField,
+    testFunctionMask=testFunctionMask,
     conv=conv,
     Models = Models,
     timePointsUsedForOneStep = timePointsUsedForOneStep,
