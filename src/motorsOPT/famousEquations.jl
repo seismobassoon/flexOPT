@@ -331,29 +331,6 @@ function famousEquation(::Val{:eq_2DsismoTimeIsoHeteroSingleForce})
 end
 
 """
-General 2-D elastic body-force equation using `C[i,j,k,l]` directly.
-
-Use this equation with `prepare_nondimensional_elasticity` when physical grid
-spacings are unequal or when the material is anisotropic. Its material order
-is `(rho, vec(C)...)`, matching `elasticity_component_models`.
-"""
-function famousEquation(::Val{:eq_2DsismoTimeTensorHeteroSingleForce})
-    @variables rho(x,y) (C(x,y))[1:2,1:2,1:2,1:2]
-    @variables u(x,y,t)[1:2] f(x,y,t)[1:2]
-    @tullio traction[i] := ∇₂[j](C[i,j,k,l] * ∇₂[l](u[k]))
-    exprs = ntuple(i -> rho * ∂t²(u[i]) - traction[i], 2)
-    fields = ntuple(i -> u[i], 2)
-    vars = (rho, vec(C)...)
-    extexprs = ntuple(i -> f[i], 2)
-    extfields = extexprs
-    extvars = extexprs
-    coordinates = (x, y, t)
-    ∂, ∂² = usefulPartials(coordinates)
-    return exprs, fields, vars, extexprs, extfields, extvars,
-        coordinates, ∂, ∂²
-end
-
-"""
 Explicit component form of the heterogeneous 2-D isotropic elastic equation.
 
 This is mathematically identical to `eq_2DsismoTimeIsoHeteroSingleForce`, but
@@ -479,23 +456,6 @@ function famousEquation(::Val{:eq_3DsismoTimeIsoHeteroForce})
         coordinates, ∂, ∂²
 end
 
-
-"""General 3-D elastic body-force equation with material order `(rho, vec(C)...)`."""
-function famousEquation(::Val{:eq_3DsismoTimeTensorHeteroForce})
-    @variables rho(x,y,z) (C(x,y,z))[1:3,1:3,1:3,1:3]
-    @variables u(x,y,z,t)[1:3] F(x,y,z,t)[1:3]
-    @tullio traction[i] := ∇₃[j](C[i,j,k,l] * ∇₃[l](u[k]))
-    exprs = ntuple(i -> rho * ∂t²(u[i]) - traction[i], 3)
-    fields = ntuple(i -> u[i], 3)
-    vars = (rho, vec(C)...)
-    extexprs = ntuple(i -> F[i], 3)
-    extfields = extexprs
-    extvars = extexprs
-    coordinates = (x, y, z, t)
-    ∂, ∂² = usefulPartials(coordinates)
-    return exprs, fields, vars, extexprs, extfields, extvars,
-        coordinates, ∂, ∂²
-end
 
 function famousEquation(::Val{:eq_highSchoolProblem})
     

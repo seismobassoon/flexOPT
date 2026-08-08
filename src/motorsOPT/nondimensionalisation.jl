@@ -196,11 +196,9 @@ function prepare_nondimensional_elasticity(
         physicalDelta=physicalDelta,
         reference_density=reference_density,
         reference_field=reference_field)
-    equation = dimension == 2 ? "2DsismoTimeTensorHeteroSingleForce" :
-        dimension == 3 ? "3DsismoTimeTensorHeteroForce" : nothing
     return merge(result, (
-        equation=equation,
         models=(result.rho, elasticity_component_models(result.C)...),
+        material_layout=(:rho, :C_ijkl),
     ))
 end
 
